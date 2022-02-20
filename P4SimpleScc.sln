@@ -1,0 +1,76 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.32002.261
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P4SimpleScc_2019", "P4SimpleScc_2019\P4SimpleScc_2019.csproj", "{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P4SimpleScc_2022", "P4SimpleScc_2022\P4SimpleScc_2022.csproj", "{A739EBFE-8820-4E3E-B9B5-23A1202506A6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClassLibrary", "ClassLibrary\ClassLibrary.csproj", "{147CB2FB-A361-49EA-A025-5E1A37AA12EF}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "SharedProject", "SharedProject\SharedProject.shproj", "{64CD1D5B-0E68-4A05-9535-BF12013DD743}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SharedFiles", "SharedFiles", "{E48A1386-AF13-48F4-8E50-8BC6D2C31097}"
+	ProjectSection(SolutionItems) = preProject
+		SharedFiles\P4SimpleSccPackage.vsct = SharedFiles\P4SimpleSccPackage.vsct
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Resources", "Resources", "{785ABA1B-4A2A-4D94-884F-4D585E4C0D50}"
+	ProjectSection(SolutionItems) = preProject
+		SharedFiles\Resources\Command.png = SharedFiles\Resources\Command.png
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ReadMe", "ReadMe", "{406A1291-CEC3-4255-90FC-1CB714ED57DC}"
+	ProjectSection(SolutionItems) = preProject
+		ReadMe\ReadMe.txt = ReadMe\ReadMe.txt
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		SharedProject\SharedProject.projitems*{64cd1d5b-0e68-4a05-9535-bf12013dd743}*SharedItemsImports = 13
+		SharedProject\SharedProject.projitems*{6b141b6a-8ace-4b1e-93fb-dde01c2f6bad}*SharedItemsImports = 4
+		SharedProject\SharedProject.projitems*{a739ebfe-8820-4e3e-b9b5-23a1202506a6}*SharedItemsImports = 4
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Debug|x86.ActiveCfg = Debug|x86
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Debug|x86.Build.0 = Debug|x86
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Release|x86.ActiveCfg = Release|x86
+		{6B141B6A-8ACE-4B1E-93FB-DDE01C2F6BAD}.Release|x86.Build.0 = Release|x86
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Debug|x86.ActiveCfg = Debug|x86
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Debug|x86.Build.0 = Debug|x86
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Release|x86.ActiveCfg = Release|x86
+		{A739EBFE-8820-4E3E-B9B5-23A1202506A6}.Release|x86.Build.0 = Release|x86
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Debug|x86.Build.0 = Debug|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Release|x86.ActiveCfg = Release|Any CPU
+		{147CB2FB-A361-49EA-A025-5E1A37AA12EF}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{785ABA1B-4A2A-4D94-884F-4D585E4C0D50} = {E48A1386-AF13-48F4-8E50-8BC6D2C31097}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {312D0A8F-D1B9-4EAF-B353-4D9F9DC82E53}
+	EndGlobalSection
+EndGlobal
