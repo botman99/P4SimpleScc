@@ -28,6 +28,7 @@ You can also select whether you want to check out files when they are modified o
 
 Finally, there is an option to prompt you with a dialog to verify that it is okay to check out each file before doing so (otherwise, the file will automatically be checked out upon modify/save).
 
+**NOTE:** If you have the P4VS extension installed, you may need to disable it (you don't need to uninstall, just disable) since the P4VS extension seems to want to make itself the active source control provider even if another provider was active or is controlling that solution.
 
 See the [Releases](https://github.com/botman99/P4SimpleScc/releases) page to download the latest release.
 
