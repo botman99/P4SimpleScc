@@ -482,5 +482,14 @@ namespace P4SimpleScc
 
 		#endregion  // IVsQueryEditQuerySave2
 
+
+        /// <summary>
+        /// Returns whether this source control provider is the active scc provider.
+        /// </summary>
+        public bool Active
+        {
+            get { return _active; }
+        }
+
 	}
 }

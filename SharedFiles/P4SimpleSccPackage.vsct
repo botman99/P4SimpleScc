@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <Include href="KnownImageIds.vsct"/>
 
   <!--  This is the file that defines the actual layout and type of the commands.
         It is divided in different sections (e.g. command definition, command
@@ -38,6 +39,13 @@
           <ButtonText>P4SimpleScc</ButtonText>
         </Strings>
       </Menu>
+      <!-- Menu for source control commands under Solution Explorer -->
+      <Menu guid="guidSccProviderCmdSet" id="imenuExplorerSourceControlMenu" priority="0x0000" type="Menu">
+        <Parent guid="guidSccProviderCmdSet" id="igrpExplorerSourceControl" />
+        <Strings>
+          <ButtonText>Sou&amp;rce Control Provider</ButtonText>
+        </Strings>
+      </Menu>
     </Menus>
 
     <!-- In this section you can define new menu groups. A menu group is a container for
@@ -45,8 +53,16 @@
          group as the part of a menu contained between two lines. The parent of a group
          must be a menu. -->
     <Groups>
-      <Group guid="guidSccProviderCmdSet" id="P4SimpleSccMenuGroup" priority="0x0600">
+      <Group guid="guidSccProviderCmdSet" id="igrpP4SimpleSccMenu" priority="0x0600">
         <Parent guid="guidSccProviderCmdSet" id="TopLevelMenu"/>
+      </Group>
+      <!-- 	Group for all other command groups in document tab menu -->
+      <Group guid="guidSccProviderCmdSet" id="igrpSourceControlCommands" priority="0x1000">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_EZDOCWINTAB"/>
+      </Group>
+      <!-- 	Group for scci buttons in the Solution Explorer right click menu -->
+      <Group guid="guidSccProviderCmdSet" id="igrpSourceControlCommands" priority="0x0000">
+        <Parent guid="guidSccProviderCmdSet" id="imenuExplorerSourceControlMenu" />
       </Group>
     </Groups>
 
@@ -61,12 +77,25 @@
               <CommandFlag>DefaultInvisible</CommandFlag>
               <CommandFlag>DynamicVisibility</CommandFlag>
           If you do not want an image next to your command, remove the Icon node /> -->
-      <Button guid="guidSccProviderCmdSet" id="SolutionConfigurationCommandId" priority="0x0100" type="Button">
-        <Parent guid="guidSccProviderCmdSet" id="P4SimpleSccMenuGroup" />
+      <Button guid="guidSccProviderCmdSet" id="icmdSolutionConfiguration" priority="0x0100" type="Button">
+        <Parent guid="guidSccProviderCmdSet" id="igrpP4SimpleSccMenu" />
         <CommandFlag>DefaultInvisible</CommandFlag>
         <CommandFlag>DynamicVisibility</CommandFlag>
         <Strings>
           <ButtonText>Solution Configuration</ButtonText>
+          <MenuText>&amp;Solution Configuration</MenuText>
+        </Strings>
+      </Button>
+      <!-- 	Scc commands in context menus for SolutionExplorer -->
+      <Button guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000" type="Button">
+        <Parent guid="guidSccProviderCmdSet" id="igrpSourceControlCommands" />
+        <Icon guid="ImageCatalogGuid" id="CheckOutItem" />
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <Strings>
+          <ButtonText>Check Out File</ButtonText>
+          <MenuText>&amp;Check Out File</MenuText>
         </Strings>
       </Button>
     </Buttons>
@@ -82,15 +111,39 @@
     </Bitmaps>
   </Commands>
 
+  <CommandPlacements>
+    <!--Context menu group for SolutionExplorer -->
+    <!--To add commands in context menus, a new group can be defined and placed into existing menus, -->
+    <!--in which case you'll have to add it to context menus for nodes of interest (solution, project, -->
+    <!--folder, item, solution folder, web reference node, properties node, etc),  -->
+    <!--A better approach though is to use one of the existing groups created for source control commands, -->
+    <!--like IDG_VS_CTXT_ITEM_SCC, IDG_VS_CTXT_PROJECT_SCC, IDG_VS_CTXT_SOLUTION_SCC. -->
+
+    <!--Place the source control commands defined in context menu for Solution Explorer -->
+    <CommandPlacement guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_ITEM_SCC" />
+    </CommandPlacement>
+    <CommandPlacement guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_PROJECT_SCC"/>
+    </CommandPlacement>
+    <CommandPlacement guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_SOLUTION_SCC"/>
+    </CommandPlacement>
+  </CommandPlacements>
+
   <Symbols>
     <!-- This is the package guid. -->
     <GuidSymbol name="guidSccProviderPkg" value="{B205A1B6-2000-4A1C-8680-97FD2219C692}" />
 
     <!-- This is the guid used to group the menu commands together -->
     <GuidSymbol name="guidSccProviderCmdSet" value="{B205A1B6-9463-474A-807D-17F40BCFBB17}">
-      <IDSymbol name="P4SimpleSccMenuGroup" value="0x1020" />
+      <IDSymbol name="igrpP4SimpleSccMenu" value="0x1020" />
       <IDSymbol name="TopLevelMenu" value="0x1021" />
-      <IDSymbol name="SolutionConfigurationCommandId" value="0x0100" />
+      <IDSymbol name="icmdSolutionConfiguration" value="0x0100" />
+      <IDSymbol name="icmdCheckOutFile" value="0x101" />
+      <IDSymbol name="imenuExplorerSourceControlMenu" value="0x200" />
+      <IDSymbol name="igrpExplorerSourceControl" value="0x300" />
+      <IDSymbol name="igrpSourceControlCommands" value="0x301" />
     </GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{57eb06ba-f21b-413b-b8a1-eb2988c5c6d9}" >

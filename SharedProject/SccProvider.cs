@@ -1,7 +1,14 @@
 ﻿
+//
+// Copyright 2022 - Jeffrey "botman" Broome
+//
+
 using System;
 using System.IO;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -9,8 +16,8 @@ using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Settings;
 using Microsoft.VisualStudio.Shell.Settings;
-using Microsoft.VisualStudio.AsyncPackageHelpers;
 using PackageAutoLoadFlags = Microsoft.VisualStudio.AsyncPackageHelpers.PackageAutoLoadFlags;
+using EnvDTE80;
 
 using MsVsShell = Microsoft.VisualStudio.Shell;
 
@@ -57,6 +64,7 @@ namespace P4SimpleScc
 	// Declare the package guid
 	[Guid("B205A1B6-2000-4A1C-8680-97FD2219C692")]  // this is GuidList.guidSccProviderPkg
 	public sealed class SccProvider : MsVsShell.Package,
+		IOleCommandTarget,
 		IVsPersistSolutionProps	// We'll write properties in the solution file to track when solution is controlled; the interface needs to be implemented by the package object
 	{
 		// The service provider implemented by the package
@@ -96,12 +104,18 @@ namespace P4SimpleScc
 
 		public static bool P4SimpleSccConfigDirty = false;  // has the solution configuration for this solution been modified (and needs to be saved)?
 
+		private static char[] InvalidChars;
+		private	List<string> FilenameList;
+
 		private CommandID menuCommandId;
+		private CommandID menuCheckOutFileCommandId;
 
 		/// <summary>
 		/// Command ID.
 		/// </summary>
-		public const int CommandId = 0x0100;
+		public const int icmdSolutionConfiguration = 0x0100;
+		public const int icmdCheckOutFile = 0x101;
+
 
 		/// <summary>
 		/// Constructor
@@ -139,6 +153,8 @@ namespace P4SimpleScc
 
 			base.Initialize();
 
+			InvalidChars = Path.GetInvalidPathChars();  // get characters not allowed in file paths
+
 			// Proffer the source control service implemented by the provider
 			sccService = new SccProviderService(this);
 			((IServiceContainer)this).AddService(typeof(SccProviderService), sccService, true);
@@ -148,13 +164,13 @@ namespace P4SimpleScc
 			if (mcs != null)
 			{
 				// ToolWindow Command
-				menuCommandId = new CommandID(GuidList.guidSccProviderCmdSet, CommandId);
+				menuCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdSolutionConfiguration);
 				MenuCommand menuCmd = new MenuCommand(new EventHandler(Exec_menuCommand), menuCommandId);
 				mcs.AddCommand(menuCmd);
 
-				// menu command is hidden and disabled by default (will be enabled when the source control provider is enabled)
-				menuCmd.Enabled = false;
-				menuCmd.Visible = false;
+				menuCheckOutFileCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdCheckOutFile);
+				MenuCommand menuCheckOutFileCmd = new MenuCommand(new EventHandler(Exec_menuCheckOutFileCommand), menuCheckOutFileCommandId);
+				mcs.AddCommand(menuCheckOutFileCmd);
 			}
 
 			bool bP4SimpleSccEnabled = false;
@@ -472,6 +488,367 @@ namespace P4SimpleScc
 		#endregion  // IVsPersistSolutionProps
 
 
+        #region Source Control Command Enabling
+
+		public int QueryStatus(ref Guid guidCmdGroup, uint cCmds, OLECMD[] prgCmds, System.IntPtr pCmdText)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+            Debug.Assert(cCmds == 1, "Multiple commands");
+            Debug.Assert(prgCmds != null, "NULL argument");
+
+            if ((prgCmds == null))
+                return VSConstants.E_INVALIDARG;
+
+            // Filter out commands that are not defined by this package
+            if (guidCmdGroup != GuidList.guidSccProviderCmdSet)
+            {
+                return (int)(Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED); ;
+            }
+
+            OLECMDF cmdf = OLECMDF.OLECMDF_SUPPORTED;
+
+            // All source control commands needs to be hidden and disabled when the provider is not active
+            if (!sccService.Active)
+            {
+                cmdf = cmdf | OLECMDF.OLECMDF_INVISIBLE;
+                cmdf = cmdf & ~(OLECMDF.OLECMDF_ENABLED);
+
+                prgCmds[0].cmdf = (uint)cmdf;
+                return VSConstants.S_OK;
+            }
+
+            // Process our Commands
+            switch (prgCmds[0].cmdID)
+            {
+                case icmdSolutionConfiguration:
+                    cmdf |= OLECMDF.OLECMDF_ENABLED;
+                    break;
+
+                case icmdCheckOutFile:
+					if (SolutionConfigType == 0)
+					{
+		                cmdf = cmdf | OLECMDF.OLECMDF_INVISIBLE;
+				        cmdf = cmdf & ~(OLECMDF.OLECMDF_ENABLED);
+					}
+					else
+					{
+	                    cmdf |= QueryStatus_icmdCheckOutFile();
+					}
+                    break;
+
+                default:
+                    return (int)(Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED);
+			}
+
+            prgCmds[0].cmdf = (uint)cmdf;
+
+            return VSConstants.S_OK;
+		}
+
+        OLECMDF QueryStatus_icmdCheckOutFile()
+        {
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (GetSolutionFileName() == null)
+            {
+                return OLECMDF.OLECMDF_INVISIBLE;
+            }
+
+            IList<VSITEMSELECTION> sel = GetSelectedNodes();
+
+			bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
+
+			FilenameList = new List<String>();
+
+			try
+			{
+				foreach (VSITEMSELECTION item in sel)
+				{
+					IVsProject Project = (IVsProject)item.pHier;
+
+					string Filename = "";
+					if (Project.GetMkDocument(item.itemid, out Filename) == VSConstants.S_OK)
+					{
+						if (Filename != "")
+						{
+							FilenameList.Add(Filename);
+
+							if (!IsCheckedOut(Filename))
+							{
+								bAllFilesAreCheckedOut = false;
+							}
+						}
+					}
+				}
+
+/* Not ready for release yet
+				foreach (VSITEMSELECTION item in sel)
+				{
+					if ((item.pHier == null) || (item.pHier as IVsSolution) != null)
+					{
+						Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "The solution was selected"));
+					}
+					else
+					{
+						GetFilesInSolutionRecursive(item.pHier, VSConstants.VSITEMID_ROOT, ref FilenameList);
+					}
+				}
+
+				foreach (String Filename in FilenameList)
+				{
+					if (Filename != "" && !IsCheckedOut(Filename))
+					{
+						bAllFilesAreCheckedOut = false;
+					}
+				}
+Not ready for release yet */
+
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: ex.message = {0}", ex.Message));
+			}
+
+			if (bAllFilesAreCheckedOut)
+			{
+				return OLECMDF.OLECMDF_SUPPORTED;
+			}
+
+			return OLECMDF.OLECMDF_ENABLED;
+        }
+
+        /// <summary>
+        /// Gets the list of directly selected VSITEMSELECTION objects
+		/// </summary>
+		/// <returns>A list of VSITEMSELECTION objects</returns>
+		private IList<VSITEMSELECTION> GetSelectedNodes()
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			// Retrieve shell interface in order to get current selection
+			IVsMonitorSelection monitorSelection = this.GetService(typeof(IVsMonitorSelection)) as IVsMonitorSelection;
+			Debug.Assert(monitorSelection != null, "Could not get the IVsMonitorSelection object from the services exposed by this project");
+			if (monitorSelection == null)
+			{
+				throw new InvalidOperationException();
+			}
+            
+			List<VSITEMSELECTION> selectedNodes = new List<VSITEMSELECTION>();
+			IntPtr hierarchyPtr = IntPtr.Zero;
+			IntPtr selectionContainer = IntPtr.Zero;
+			try
+			{
+				// Get the current project hierarchy, project item, and selection container for the current selection
+				// If the selection spans multiple hierachies, hierarchyPtr is Zero
+				uint itemid;
+				IVsMultiItemSelect multiItemSelect = null;
+				ErrorHandler.ThrowOnFailure(monitorSelection.GetCurrentSelection(out hierarchyPtr, out itemid, out multiItemSelect, out selectionContainer));
+
+                if (itemid != VSConstants.VSITEMID_SELECTION)
+                {
+				    // We only care if there are nodes selected in the tree
+                    if (itemid != VSConstants.VSITEMID_NIL)
+                    {
+                        if (hierarchyPtr == IntPtr.Zero)
+                        {
+                            // Solution is selected
+                            VSITEMSELECTION vsItemSelection;
+                            vsItemSelection.pHier = null;
+                            vsItemSelection.itemid = itemid;
+                            selectedNodes.Add(vsItemSelection);
+                        }
+                        else
+                        {
+                            IVsHierarchy hierarchy = (IVsHierarchy)Marshal.GetObjectForIUnknown(hierarchyPtr);
+                            // Single item selection
+                            VSITEMSELECTION vsItemSelection;
+                            vsItemSelection.pHier = hierarchy;
+                            vsItemSelection.itemid = itemid;
+                            selectedNodes.Add(vsItemSelection);
+                        }
+                    }
+                }
+                else
+                {
+                    if (multiItemSelect != null)
+                    {
+                        // This is a multiple item selection.
+
+                        //Get number of items selected and also determine if the items are located in more than one hierarchy
+                        uint numberOfSelectedItems;
+                        int isSingleHierarchyInt;
+                        ErrorHandler.ThrowOnFailure(multiItemSelect.GetSelectionInfo(out numberOfSelectedItems, out isSingleHierarchyInt));
+                        bool isSingleHierarchy = (isSingleHierarchyInt != 0);
+
+                        // Now loop all selected items and add them to the list 
+                        Debug.Assert(numberOfSelectedItems > 0, "Bad number of selected itemd");
+                        if (numberOfSelectedItems > 0)
+                        {
+                            VSITEMSELECTION[] vsItemSelections = new VSITEMSELECTION[numberOfSelectedItems];
+                            ErrorHandler.ThrowOnFailure(multiItemSelect.GetSelectedItems(0, numberOfSelectedItems, vsItemSelections));
+                            foreach (VSITEMSELECTION vsItemSelection in vsItemSelections)
+                            {
+                                selectedNodes.Add(vsItemSelection);
+                            }
+                        }
+                    }
+                }
+			}
+			finally
+			{
+				if (hierarchyPtr != IntPtr.Zero)
+				{
+					Marshal.Release(hierarchyPtr);
+				}
+				if (selectionContainer != IntPtr.Zero)
+				{
+					Marshal.Release(selectionContainer);
+				}
+			}
+
+			return selectedNodes;
+		}
+
+/* Not ready for release yet
+		private void GetFilesInSolutionRecursive(IVsHierarchy hierarchy, uint itemId, ref List<string> FilenameList)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			try
+			{
+				// NOTE: If itemId == VSConstants.VSITEMID_ROOT then this hierarchy is a solution, project, or folder in the Solution Explorer
+
+				if (hierarchy == null)
+				{
+					return;
+				}
+
+				IVsProject Project = (IVsProject)hierarchy;
+
+				object ChildObject = null;
+
+				// Get the first visible child node
+				if (hierarchy.GetProperty(itemId, (int)__VSHPROPID.VSHPROPID_FirstVisibleChild, out ChildObject) == VSConstants.S_OK)
+				{
+					while (ChildObject != null)
+					{
+						if ((ChildObject is int) && ((uint)(int)ChildObject == VSConstants.VSITEMID_NIL))
+						{
+							break;
+						}
+
+						uint visibleChildNodeId = Convert.ToUInt32(ChildObject);
+
+						Guid nestedHierarchyGuid = typeof(IVsHierarchy).GUID;
+						IntPtr nestedHiearchyValue = IntPtr.Zero;
+						uint nestedItemIdValue = 0;
+
+						// see if the child node has a nested hierarchy (i.e. is it a project?, is it a folder?, etc.)...
+						if ((hierarchy.GetNestedHierarchy(visibleChildNodeId, ref nestedHierarchyGuid, out nestedHiearchyValue, out nestedItemIdValue) == VSConstants.S_OK) &&
+							(nestedHiearchyValue != IntPtr.Zero && nestedItemIdValue == VSConstants.VSITEMID_ROOT))
+						{
+							// Get the new hierarchy
+							IVsHierarchy nestedHierarchy = System.Runtime.InteropServices.Marshal.GetObjectForIUnknown(nestedHiearchyValue) as IVsHierarchy;
+							System.Runtime.InteropServices.Marshal.Release(nestedHiearchyValue);
+
+							if (nestedHierarchy != null)
+							{
+								IVsProject NewProject = null;
+								string NewProjectName = "";
+
+								NewProject = (IVsProject)nestedHierarchy;
+								if (NewProject != null)
+								{
+									object nameObject = null;
+
+									if ((nestedHierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_Name, out nameObject) == VSConstants.S_OK) && (nameObject != null))
+									{
+										NewProjectName = (string)nameObject;
+
+										if (NewProjectName.Contains("External"))
+										{
+											Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "External!"));
+										}
+									}
+
+									// recurse into the new nested hierarchy to handle children...
+									GetFilesInSolutionRecursive(nestedHierarchy, VSConstants.VSITEMID_ROOT, ref FilenameList);
+								}
+							}
+						}
+						else
+						{
+							string projectFilename = "";
+
+							try
+							{
+								if (Project.GetMkDocument(visibleChildNodeId, out projectFilename) == VSConstants.S_OK)
+								{
+									if ((projectFilename != null) && (projectFilename.Length > 0) &&
+										(!projectFilename.EndsWith("\\")) &&  // some invalid "filenames" will end with '\\'
+										(projectFilename.IndexOfAny(InvalidChars) == -1) &&
+										(projectFilename.IndexOf(":", StringComparison.OrdinalIgnoreCase) == 1))  // make sure filename is of the form: drive letter followed by colon
+									{
+										if (!FilenameList.Contains(projectFilename))
+										{
+											FilenameList.Add(projectFilename);
+										}
+									}
+
+								}
+							}
+							catch (Exception ex)
+							{
+								Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: {0}", ex.Message));
+							}
+
+							object NodeChildObject = null;
+
+							// see if this regular node has children...
+							if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_FirstVisibleChild, out NodeChildObject) == VSConstants.S_OK)
+							{
+								if (NodeChildObject != null)
+								{
+									if ((NodeChildObject is int) && ((uint)(int)NodeChildObject != VSConstants.VSITEMID_NIL))
+									{
+										string captionName = "";
+										object captionNameObject = null;
+										if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_Caption, out captionNameObject) == VSConstants.S_OK)
+										{
+											captionName = (string)captionNameObject;
+										}
+
+										if (captionName != "External Dependencies")
+										{
+											// recurse into the regular node to handle children...
+											GetFilesInSolutionRecursive(hierarchy, visibleChildNodeId, ref FilenameList);
+										}
+									}
+								}
+							}
+						}
+
+						ChildObject = null;
+
+						// Get the next visible sibling node
+						if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_NextVisibleSibling, out ChildObject) != VSConstants.S_OK)
+						{
+							break;
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: {0}", ex.Message));
+			}
+		}
+Not ready for release yet */
+
+		#endregion // Source Control Command Enabling
+
+
 		#region Source Control Commands Execution
 
 		private void Exec_menuCommand(object sender, EventArgs e)
@@ -541,6 +918,16 @@ namespace P4SimpleScc
 				ServerConnect();  // attempt to connect to the server using the new settings
 			}
 
+		}
+
+		private void Exec_menuCheckOutFileCommand(object sender, EventArgs e)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			foreach (string Filename in FilenameList)
+			{
+				CheckOutFile(Filename);
+			}
 		}
 
 		#endregion  // Source Control Commands Execution

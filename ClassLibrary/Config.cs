@@ -1,4 +1,9 @@
-﻿using System;
+﻿
+//
+// Copyright 2022 - Jeffrey "botman" Broome
+//
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
