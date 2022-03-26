@@ -20,6 +20,7 @@ namespace ClassLibrary
 
         private StringBuilder stdoutBuilder;
         private StringBuilder stderrBuilder;
+        private StringBuilder verboseBuilder;
 
 		private bool StdOutDone;  // wait until OnOutputDataReceived receives e.Data == null to know that stdout has terminated
 		private bool StdErrDone;  // wait until OnErrorDataReceived receives e.Data == null to know that stderr has terminated
@@ -43,15 +44,16 @@ namespace ClassLibrary
 			workspace = in_workspace;
 		}
 
-		public void Run(string command, out string stdout, out string stderr)  // use the current port, user and workspace for the command
+		public void Run(string command, out string stdout, out string stderr, out string verbose)  // use the current port, user and workspace for the command
 		{
-			Run(command, port, user, workspace, out stdout, out stderr);
+			Run(command, port, user, workspace, out stdout, out stderr, out verbose);
 		}
 
-		public void Run(string command, string in_port, string in_user, string in_workspace, out string stdout, out string stderr)  // use the specified port, user and workspace for the command
+		public void Run(string command, string in_port, string in_user, string in_workspace, out string stdout, out string stderr, out string verbose)  // use the specified port, user and workspace for the command
 		{
 	        stdoutBuilder = new StringBuilder();
 			stderrBuilder = new StringBuilder();
+			verboseBuilder = new StringBuilder();
 
 			bool bTimedOut = false;
 
@@ -64,7 +66,7 @@ namespace ClassLibrary
 
 				ProcessStartInfo startInfo = new ProcessStartInfo("cmd.exe");
 
-				string arguments = "/C p4.exe";
+				string arguments = "p4.exe";
 
 				if (in_port != null && in_port.Length > 0)
 				{
@@ -81,14 +83,15 @@ namespace ClassLibrary
 					arguments += String.Format(" -c {0}", in_workspace);
 				}
 
-				startInfo.Arguments = arguments + " " + command;
-
 				startInfo.UseShellExecute = false;
 				startInfo.CreateNoWindow = true;
 
 				startInfo.RedirectStandardInput = false;
 				startInfo.RedirectStandardOutput = true;
 				startInfo.RedirectStandardError = true;
+
+				startInfo.Arguments = "/C " + arguments + " " + command;
+				verboseBuilder.Append("command: " + arguments + " " + command + "\n");
 
 				proc.StartInfo = startInfo;
 				proc.EnableRaisingEvents = true;
@@ -127,6 +130,20 @@ namespace ClassLibrary
 
 			stdout = stdoutBuilder.ToString();
 			stderr = stderrBuilder.ToString();
+
+			verboseBuilder.Append("response: " + stdout);
+			if (!stdout.EndsWith("\n"))
+			{
+				verboseBuilder.Append("\n");
+			}
+
+			verboseBuilder.Append("error: " + stderr);
+			if (!stderr.EndsWith("\n"))
+			{
+				verboseBuilder.Append("\n");
+			}
+
+			verbose = verboseBuilder.ToString();
 
 			if (bTimedOut)  // did the P4 command take too long and time out?
 			{
@@ -214,16 +231,19 @@ namespace ClassLibrary
 			return false;
 		}
 
-		public void RunP4Set(string solutionDirectory, out string P4Port, out string P4User, out string P4Client)
+		public void RunP4Set(string solutionDirectory, out string P4Port, out string P4User, out string P4Client, out string verbose)
 		{
 			P4Port = "";
 			P4User = "";
 			P4Client = "";
+			verbose = "";
 
 			if (solutionDirectory == null || solutionDirectory == "")
 			{
 				return;
 			}
+
+			SetEnv(P4Port, P4User, P4Client);
 
 			// the "p4.exe set" command must be run from the solution directory (to get the proper settings from the .p4config file)
 			string CurrentDirectory = Directory.GetCurrentDirectory();  // save the current directory
@@ -231,7 +251,7 @@ namespace ClassLibrary
 
 			P4Command p4cmd = new ClassLibrary.P4Command();
 
-			p4cmd.Run("set", out string stdout, out string stderr);  // note: "p4 set" does not require a port, user, password or workspace.
+			p4cmd.Run("set", out string stdout, out string stderr, out verbose);  // note: "p4 set" does not require a port, user, password or workspace.
 
 			Directory.SetCurrentDirectory(CurrentDirectory);  // restore the saved current directory
 
@@ -275,29 +295,39 @@ namespace ClassLibrary
 			}
 		}
 
-		public void ServerConnect(out string stdout, out string stderr)
+		public void ServerConnect(out string stdout, out string stderr, out string verbose)
 		{
-			Run("help", "", "", "", out stdout, out stderr);  // no server, just verify that P4.exe can run locally and get help
+			verbose = "";
+
+			Run("help", "", "", "", out stdout, out stderr, out string help_verbose);  // no server, just verify that P4.exe can run locally and get help
+			verbose += help_verbose;
+
 			if (stderr != null && stderr.Length > 0)
 			{
 				return;
 			}
 
-			Run("info -s", port, "", "", out stdout, out stderr);  // 'info' needs to run on the specified server (to make sure the server is valid)
+			Run("info -s", port, "", "", out stdout, out stderr, out string info_verbose);  // 'info' needs to run on the specified server (to make sure the server is valid)
+			verbose += info_verbose;
+
 			if (stderr != null && stderr.Length > 0)
 			{
 				return;
 			}
 
 			string command = String.Format("users {0}", user);
-			Run(command, port, user, "", out stdout, out stderr);  // get the user information from the specified server (to make sure the user is valid)
+			Run(command, port, user, "", out stdout, out stderr, out string users_verbose);  // get the user information from the specified server (to make sure the user is valid)
+			verbose += users_verbose;
+
 			if (stderr != null && stderr.Length > 0)
 			{
 				return;
 			}
 
 			command = String.Format("client -o {0}", workspace);  // get the user's workspace from the specified server and then validate it
-			Run(command, port, user, "", out stdout, out stderr);
+			Run(command, port, user, "", out stdout, out stderr, out string client_verbose);
+			verbose += client_verbose;
+
 			if (stderr != null && stderr.Length > 0)
 			{
 				return;
@@ -326,11 +356,11 @@ namespace ClassLibrary
 			}
 		}
 
-		public bool IsCheckedOut(string Filename, out string stdout, out string stderr)
+		public bool IsCheckedOut(string Filename, out string stdout, out string stderr, out string verbose)
 		{
 			// see if the file is checked out (for edit, not for integrate)
 			string command = String.Format("fstat -T \"action\" \"{0}\"", Filename);
-			Run(command, out stdout, out stderr);
+			Run(command, out stdout, out stderr, out verbose);
 
 			if (stderr == null || stderr.Length == 0)  // ignore errors here, if no error, check if file is open for edit
 			{
@@ -346,11 +376,14 @@ namespace ClassLibrary
 			return false;
 		}
 
-		public CheckOutStatus CheckOutFile(string Filename, out string stdout, out string stderr)
+		public CheckOutStatus CheckOutFile(string Filename, out string stdout, out string stderr, out string verbose)
 		{
+			verbose = "";
+
 			// see if the file exists in source control
 			string command = String.Format("fstat -T \"clientFile\" \"{0}\"", Filename);
-			Run(command, out stdout, out stderr);
+			Run(command, out stdout, out stderr, out string clientFile_verbose);
+			verbose += clientFile_verbose;
 
 			if (stderr != null && stderr.Length > 0)
 			{
@@ -366,7 +399,8 @@ namespace ClassLibrary
 
 			// see if the file is already checked out
 			command = String.Format("fstat -T \"action\" \"{0}\"", Filename);
-			Run(command, out stdout, out stderr);
+			Run(command, out stdout, out stderr, out string action_verbose);
+			verbose += action_verbose;
 
 			if (stderr == null || stderr.Length == 0)  // ignore errors here, if no error, check if file is open for edit
 			{
@@ -380,7 +414,8 @@ namespace ClassLibrary
 			}
 
 			command = String.Format("edit \"{0}\"", Filename);
-			Run(command, out stdout, out stderr);
+			Run(command, out stdout, out stderr, out string edit_verbose);
+			verbose += edit_verbose;
 
 			if (stderr != null && stderr.Length > 0)
 			{

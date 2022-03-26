@@ -21,6 +21,7 @@ namespace ClassLibrary
 		public int SolutionConfigType = 0;
 		public bool bCheckOutOnEdit = true;
 		public bool bPromptForCheckout = false;
+		public bool bVerboseOutput = false;
 
 		public string P4Port = "";
 		public string P4User = "";
@@ -31,16 +32,26 @@ namespace ClassLibrary
 		private string ManualP4User = "";
 		private string ManualP4Client = "";
 
-		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInCheckOutOnEdit, bool bInPromptForCheckout, string InP4Port, string InP4User, string InP4Client)
+		public delegate void VerboseOutputDelegate(string message, bool bVerboseOutput);
+		private VerboseOutputDelegate VerboseOutput = null;
+
+		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInVerboseOutput, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
 		{
 			bWindowInitComplete = false;  // we aren't done initializing the window yet
 
 			InitializeComponent();
 
+			VerboseOutput = new VerboseOutputDelegate(InVerboseOutput);
+
 			solutionDirectory = InSolutionDirectory;
 			SolutionConfigType = InSolutionConfigType;
 			bCheckOutOnEdit = bInCheckOutOnEdit;
 			bPromptForCheckout = bInPromptForCheckout;
+			bVerboseOutput = bInVerboseOutput;
+
+			P4Port = InP4Port;
+			P4User = InP4User;
+			P4Client = InP4Client;
 
 			if (SolutionConfigType == 0)  // disabled
 			{
@@ -52,9 +63,9 @@ namespace ClassLibrary
 			}
 			else if (SolutionConfigType == 2)  // manual
 			{
-				ManualP4Port = InP4Port;
-				ManualP4User = InP4User;
-				ManualP4Client = InP4Client;
+				ManualP4Port = P4Port;
+				ManualP4User = P4User;
+				ManualP4Client = P4Client;
 
 				radioButtonManual.Checked = true;
 			}
@@ -69,6 +80,7 @@ namespace ClassLibrary
 			}
 
 			checkBoxPromptForCheckout.Checked = bPromptForCheckout;
+			checkBoxVerboseOutput.Checked = bVerboseOutput;
 
 			PosX = InPosX;
 			PosY = InPosY;
@@ -134,7 +146,12 @@ namespace ClassLibrary
 				SolutionConfigType = 1;  // automatic
 
 				P4Command p4 = new P4Command();
-				p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client);
+				p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client, out string verbose);
+
+				if (VerboseOutput != null)
+				{
+					VerboseOutput(verbose, bVerboseOutput);
+				}
 
 				TextBoxEnable(false);
 				SetTextBoxText();
@@ -147,6 +164,7 @@ namespace ClassLibrary
 			{
 				SolutionConfigType = 2;  // manual settings
 
+				// default to the previously set manual settings
 				P4Port = ManualP4Port;
 				P4User = ManualP4User;
 				P4Client = ManualP4Client;
@@ -192,6 +210,11 @@ namespace ClassLibrary
 		private void checkBoxPromptForCheckout_CheckedChanged(object sender, EventArgs e)
 		{
 			bPromptForCheckout = checkBoxPromptForCheckout.Checked;
+		}
+
+		private void checkBoxVerboseOutput_CheckedChanged(object sender, EventArgs e)
+		{
+			bVerboseOutput = checkBoxVerboseOutput.Checked;
 		}
 
 		private void buttonOK_Click(object sender, EventArgs e)

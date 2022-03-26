@@ -393,41 +393,44 @@ namespace P4SimpleScc
 
 			if (_sccProvider.SolutionConfigType != 0)  // if not disabled...
 			{
-				try 
+				if (!_sccProvider.bCheckOutOnEdit)
 				{
-					//Iterate through all the files
-					for (int iFile = 0; iFile < cFiles; iFile++)
+					try 
 					{
-						bool fileExists = File.Exists(rgpszMkDocuments[iFile]);  // if the file doesn't exist, then we don't need to check it out (it's a brand new file)
-
-						if (fileExists)
+						//Iterate through all the files
+						for (int iFile = 0; iFile < cFiles; iFile++)
 						{
-							bool bIsCheckoutOkay = true;
-							bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile]);
+							bool fileExists = File.Exists(rgpszMkDocuments[iFile]);  // if the file doesn't exist, then we don't need to check it out (it's a brand new file)
 
-							if (_sccProvider.bPromptForCheckout && !bIsCheckedOut)  // if prompt for permission to check out and file is not checked out...
+							if (fileExists)
 							{
-								IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
+								bool bIsCheckoutOkay = true;
+								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile]);
 
-								string message = String.Format("Do you want to check out: '{0}'?", rgpszMkDocuments[iFile]);
-								if (!VsShellUtilities.PromptYesNo(message, "Warning", OLEMSGICON.OLEMSGICON_WARNING, uiShell))
+								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut)  // if prompt for permission to check out and file is not checked out...
 								{
-									bIsCheckoutOkay = false;
-									pdwQSResult = (uint)tagVSQuerySaveResult.QSR_NoSave_UserCanceled;
-								}
-							}
+									IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
 
-							if (bIsCheckoutOkay && !bIsCheckedOut && !_sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file exists and we couldn't check it out, then it's not okay to save the file
-							{
-								pdwQSResult = (uint)tagVSQuerySaveResult.QSR_ForceSaveAs;  // force a "Save As" dialog to save the file
+									string message = String.Format("Do you want to check out: '{0}'?", rgpszMkDocuments[iFile]);
+									if (!VsShellUtilities.PromptYesNo(message, "Warning", OLEMSGICON.OLEMSGICON_WARNING, uiShell))
+									{
+										bIsCheckoutOkay = false;
+										pdwQSResult = (uint)tagVSQuerySaveResult.QSR_NoSave_UserCanceled;
+									}
+								}
+
+								if (bIsCheckoutOkay && !bIsCheckedOut && !_sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file exists and we couldn't check it out, then it's not okay to save the file
+								{
+									pdwQSResult = (uint)tagVSQuerySaveResult.QSR_ForceSaveAs;  // force a "Save As" dialog to save the file
+								}
 							}
 						}
 					}
-				}
-				catch (Exception)
-				{
-					// If an exception was caught, do not allow the save
-					pdwQSResult = (uint)tagVSQuerySaveResult.QSR_NoSave_Cancel;
+					catch (Exception)
+					{
+						// If an exception was caught, do not allow the save
+						pdwQSResult = (uint)tagVSQuerySaveResult.QSR_NoSave_Cancel;
+					}
 				}
 			}
 	 

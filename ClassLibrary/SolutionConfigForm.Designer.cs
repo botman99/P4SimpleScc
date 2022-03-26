@@ -49,6 +49,7 @@ namespace ClassLibrary
 			this.buttonOK = new System.Windows.Forms.Button();
 			this.buttonCancel = new System.Windows.Forms.Button();
 			this.checkBoxPromptForCheckout = new System.Windows.Forms.CheckBox();
+			this.checkBoxVerboseOutput = new System.Windows.Forms.CheckBox();
 			this.panel1.SuspendLayout();
 			this.panel2.SuspendLayout();
 			this.SuspendLayout();
@@ -231,20 +232,20 @@ namespace ClassLibrary
 			// 
 			// buttonOK
 			// 
-			this.buttonOK.Location = new System.Drawing.Point(325, 399);
+			this.buttonOK.Location = new System.Drawing.Point(325, 422);
 			this.buttonOK.Name = "buttonOK";
 			this.buttonOK.Size = new System.Drawing.Size(79, 29);
-			this.buttonOK.TabIndex = 3;
+			this.buttonOK.TabIndex = 4;
 			this.buttonOK.Text = "OK";
 			this.buttonOK.UseVisualStyleBackColor = true;
 			this.buttonOK.Click += new System.EventHandler(this.buttonOK_Click);
 			// 
 			// buttonCancel
 			// 
-			this.buttonCancel.Location = new System.Drawing.Point(421, 399);
+			this.buttonCancel.Location = new System.Drawing.Point(421, 422);
 			this.buttonCancel.Name = "buttonCancel";
 			this.buttonCancel.Size = new System.Drawing.Size(79, 29);
-			this.buttonCancel.TabIndex = 4;
+			this.buttonCancel.TabIndex = 5;
 			this.buttonCancel.Text = "Cancel";
 			this.buttonCancel.UseVisualStyleBackColor = true;
 			this.buttonCancel.Click += new System.EventHandler(this.buttonCancel_Click);
@@ -260,11 +261,23 @@ namespace ClassLibrary
 			this.checkBoxPromptForCheckout.UseVisualStyleBackColor = true;
 			this.checkBoxPromptForCheckout.CheckedChanged += new System.EventHandler(this.checkBoxPromptForCheckout_CheckedChanged);
 			// 
+			// checkBoxVerboseOutput
+			// 
+			this.checkBoxVerboseOutput.AutoSize = true;
+			this.checkBoxVerboseOutput.Location = new System.Drawing.Point(25, 393);
+			this.checkBoxVerboseOutput.Name = "checkBoxVerboseOutput";
+			this.checkBoxVerboseOutput.Size = new System.Drawing.Size(226, 17);
+			this.checkBoxVerboseOutput.TabIndex = 3;
+			this.checkBoxVerboseOutput.Text = "Verbose Output ( for debugging purposes )";
+			this.checkBoxVerboseOutput.UseVisualStyleBackColor = true;
+			this.checkBoxVerboseOutput.CheckedChanged += new System.EventHandler(this.checkBoxVerboseOutput_CheckedChanged);
+			// 
 			// SolutionConfigForm
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(531, 446);
+			this.ClientSize = new System.Drawing.Size(531, 469);
+			this.Controls.Add(this.checkBoxVerboseOutput);
 			this.Controls.Add(this.checkBoxPromptForCheckout);
 			this.Controls.Add(this.buttonCancel);
 			this.Controls.Add(this.buttonOK);
@@ -308,5 +321,6 @@ namespace ClassLibrary
 		private System.Windows.Forms.Button buttonOK;
 		private System.Windows.Forms.Button buttonCancel;
 		private System.Windows.Forms.CheckBox checkBoxPromptForCheckout;
+		private System.Windows.Forms.CheckBox checkBoxVerboseOutput;
 	}
 }

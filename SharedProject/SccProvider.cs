@@ -101,6 +101,7 @@ namespace P4SimpleScc
 		public string P4Port = "";
 		public string P4User = "";
 		public string P4Client = "";
+		public bool bVerboseOutput = false;
 
 		public static bool P4SimpleSccConfigDirty = false;  // has the solution configuration for this solution been modified (and needs to be saved)?
 
@@ -869,7 +870,7 @@ Not ready for release yet */
 			int pos_y = -1;
 			Config.Get(Config.KEY.SolutionConfigDialogPosY, ref pos_y);
 
-			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bCheckOutOnEdit, bPromptForCheckout, P4Port, P4User, P4Client);
+			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bCheckOutOnEdit, bPromptForCheckout, bVerboseOutput, P4Port, P4User, P4Client, VerboseOutput);
 
 			System.Windows.Forms.DialogResult result = Dialog.ShowDialog();
 
@@ -887,6 +888,7 @@ Not ready for release yet */
 				SolutionConfigType = Dialog.SolutionConfigType;
 				bCheckOutOnEdit = Dialog.bCheckOutOnEdit;
 				bPromptForCheckout = Dialog.bPromptForCheckout;
+				bVerboseOutput = Dialog.bVerboseOutput;
 
 				if (Dialog.SolutionConfigType == 2)  // manual settings
 				{
@@ -905,6 +907,7 @@ Not ready for release yet */
 				Config.Set(Config.KEY.SolutionConfigType, SolutionConfigType);
 				Config.Set(Config.KEY.SolutionConfigCheckOutOnEdit, bCheckOutOnEdit);
 				Config.Set(Config.KEY.SolutionConfigPromptForCheckout, bPromptForCheckout);
+				Config.Set(Config.KEY.SolutionConfigVerboseOutput, bVerboseOutput);
 
 				// these will be blank for all configurations except 'manual settings' (SetP4SettingsForSolution will re-initialize them at runtime)
 				Config.Set(Config.KEY.SolutionConfigDialogP4Port, P4Port);
@@ -946,11 +949,21 @@ Not ready for release yet */
 
 				Config.Get(Config.KEY.SolutionConfigCheckOutOnEdit, ref bCheckOutOnEdit);
 				Config.Get(Config.KEY.SolutionConfigPromptForCheckout, ref bPromptForCheckout);
+				Config.Get(Config.KEY.SolutionConfigVerboseOutput, ref bVerboseOutput);
 
 				if (SolutionConfigType == 1)  // if automatic settings
 				{
 					P4Command p4 = new P4Command();
-					p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client);
+					p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client, out string verbose);
+
+					if (bVerboseOutput)
+					{
+						if (!verbose.EndsWith("\n"))
+						{
+							verbose += "\n";
+						}
+						P4SimpleSccOutput(verbose);
+					}
 				}
 				if (SolutionConfigType == 2)  // if manual settings
 				{
@@ -993,7 +1006,17 @@ Not ready for release yet */
 			{
 				P4Command p4 = new P4Command();
 
-				p4.ServerConnect(out string stdout, out string stderr);
+				p4.ServerConnect(out string stdout, out string stderr, out string verbose);
+
+				if (bVerboseOutput)
+				{
+					if (!verbose.EndsWith("\n"))
+					{
+						verbose += "\n";
+					}
+					P4SimpleSccOutput(verbose);
+				}
+
 				if (stderr != null && stderr.Length > 0)
 				{
 					P4SimpleSccOutput("Connection to server failed!\n");
@@ -1019,7 +1042,16 @@ Not ready for release yet */
 			{
 				P4Command p4 = new P4Command();
 
-				status = p4.IsCheckedOut(Filename, out string stdout, out string stderr);  // ignore stderr here since failure will be treated as if file is not checked out
+				status = p4.IsCheckedOut(Filename, out string stdout, out string stderr, out string verbose);  // ignore stderr here since failure will be treated as if file is not checked out
+
+				if (bVerboseOutput)
+				{
+					if (!verbose.EndsWith("\n"))
+					{
+						verbose += "\n";
+					}
+					P4SimpleSccOutput(verbose);
+				}
 			}
 
 			return status;
@@ -1035,7 +1067,16 @@ Not ready for release yet */
 				{
 					P4Command p4 = new P4Command();
 
-					P4Command.CheckOutStatus status = p4.CheckOutFile(Filename, out string stdout, out string stderr);
+					P4Command.CheckOutStatus status = p4.CheckOutFile(Filename, out string stdout, out string stderr, out string verbose);
+
+					if (bVerboseOutput)
+					{
+						if (!verbose.EndsWith("\n"))
+						{
+							verbose += "\n";
+						}
+						P4SimpleSccOutput(verbose);
+					}
 
 					// if file already checked out, or file not in client's root (outside workspace), or file is not in source control (brand new file, not yet added to source control)
 					if (status == P4Command.CheckOutStatus.FileAlreadyCheckedOut || status == P4Command.CheckOutStatus.FileNotInSourceControl)
@@ -1062,6 +1103,22 @@ Not ready for release yet */
 			}
 
 			return true;  // return good status if P4SimpleScc is disabled for this solution
+		}
+
+		public void VerboseOutput(string message, bool bInVerboseOutput)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			string output = message;
+
+			if (bInVerboseOutput)
+			{
+				if (!message.EndsWith("\n"))
+				{
+					output += "\n";
+				}
+				P4SimpleSccOutput(output);
+			}
 		}
 
 		/// <summary>

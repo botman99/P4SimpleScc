@@ -24,6 +24,7 @@ namespace ClassLibrary
 			SolutionConfigDialogP4Port,  // string
 			SolutionConfigDialogP4User,  // string
 			SolutionConfigDialogP4Client,  // string
+			SolutionConfigVerboseOutput,  // bool
 		};
 
 		private static Dictionary<string, string> ConfigDictionary = new Dictionary<string,string>();
