@@ -1138,7 +1138,7 @@ Not ready for release yet */
 
 				if (OutputPane != null)
 				{
-					OutputPane.OutputString(DateTime.Now.ToString("MM/dd/yyyy HH:mm::ss - "));
+					OutputPane.OutputString(DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss - "));
 					OutputPane.OutputString(text);
 				}
 			}
