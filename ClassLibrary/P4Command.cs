@@ -147,7 +147,7 @@ namespace ClassLibrary
 
 			if (bTimedOut)  // did the P4 command take too long and time out?
 			{
-				stderr = "Perforce command timed out after waiting for 5 minutes.  Check your Solution Configuration settings to make sure they are correct.  You may want to try to manually check out or add the file in P4V.";
+				stderr = "Perforce command timed out after waiting for 5 minutes.  Check your Solution Configuration settings to make sure they are correct.  You may want to try to manually check out or add the file in P4V.\n";
 			}
 		}
 
@@ -299,14 +299,6 @@ namespace ClassLibrary
 		{
 			verbose = "";
 
-			Run("help", "", "", "", out stdout, out stderr, out string help_verbose);  // no server, just verify that P4.exe can run locally and get help
-			verbose += help_verbose;
-
-			if (stderr != null && stderr.Length > 0)
-			{
-				return;
-			}
-
 			Run("info -s", port, "", "", out stdout, out stderr, out string info_verbose);  // 'info' needs to run on the specified server (to make sure the server is valid)
 			verbose += info_verbose;
 
@@ -337,21 +329,21 @@ namespace ClassLibrary
 			string Access = "";
 			if (!GetField(stdout, "Access:", out Access))
 			{
-				stderr = String.Format("P4CLIENT workspace '{0}' is not valid on server.", workspace);
+				stderr = String.Format("P4CLIENT workspace '{0}' is not valid on server.\n", workspace);
 				return;
 			}
 
 			string Root = "";
 			if (!GetField(stdout, "Root:", out Root))
 			{
-				stderr = String.Format("P4CLIENT workspace '{0}' is not valid on server.", workspace);
+				stderr = String.Format("P4CLIENT workspace '{0}' is not valid on server.\n", workspace);
 				return;
 			}
 
 			// check if Root directory exists on this machine
 			if (!Directory.Exists(Root))
 			{
-				stderr = String.Format("workspace Root: folder '{0}' does not exist on this machine.", Root);
+				stderr = String.Format("workspace Root: folder '{0}' does not exist on this machine.\n", Root);
 				return;
 			}
 		}
