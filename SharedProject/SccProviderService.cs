@@ -325,9 +325,15 @@ namespace P4SimpleScc
 							else
 							{
 								bool bIsCheckoutOkay = true;
-								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile]);
+								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
 
-								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut)  // if prompt for permission to check out and file is not checked out...
+								bool bCanFileBeCheckedOut = true;
+								if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+								{
+									bCanFileBeCheckedOut = false;
+								}
+
+								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut && bCanFileBeCheckedOut)  // if prompt for permission to check out and file is not checked out...
 								{
 									IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
 
@@ -343,7 +349,7 @@ namespace P4SimpleScc
 
 								if (bIsCheckoutOkay)
 								{
-									if (bIsCheckedOut || _sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file is already checked out or if we were able to check out the file, then edit is okay
+									if (bIsCheckedOut || (bCanFileBeCheckedOut && _sccProvider.CheckOutFile(rgpszMkDocuments[iFile])))  // if file is already checked out or if we were able to check out the file, then edit is okay
 									{
 										fEditVerdict = (uint)tagVSQueryEditResult.QER_EditOK;
 										fMoreInfo = (uint)tagVSQueryEditResultFlags.QER_MaybeCheckedout;
@@ -405,9 +411,15 @@ namespace P4SimpleScc
 							if (fileExists)
 							{
 								bool bIsCheckoutOkay = true;
-								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile]);
+								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
 
-								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut)  // if prompt for permission to check out and file is not checked out...
+								bool bCanFileBeCheckedOut = true;
+								if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+								{
+									bCanFileBeCheckedOut = false;
+								}
+
+								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut && bCanFileBeCheckedOut)  // if prompt for permission to check out and file is not checked out...
 								{
 									IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
 
@@ -419,7 +431,7 @@ namespace P4SimpleScc
 									}
 								}
 
-								if (bIsCheckoutOkay && !bIsCheckedOut && !_sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file exists and we couldn't check it out, then it's not okay to save the file
+								if (bIsCheckoutOkay && !bIsCheckedOut && bCanFileBeCheckedOut && !_sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file exists and we couldn't check it out, then it's not okay to save the file
 								{
 									pdwQSResult = (uint)tagVSQuerySaveResult.QSR_ForceSaveAs;  // force a "Save As" dialog to save the file
 								}

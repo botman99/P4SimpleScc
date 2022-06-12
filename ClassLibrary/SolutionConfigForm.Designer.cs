@@ -50,6 +50,7 @@ namespace ClassLibrary
 			this.buttonCancel = new System.Windows.Forms.Button();
 			this.checkBoxPromptForCheckout = new System.Windows.Forms.CheckBox();
 			this.checkBoxVerboseOutput = new System.Windows.Forms.CheckBox();
+			this.checkBoxOutputEnabled = new System.Windows.Forms.CheckBox();
 			this.panel1.SuspendLayout();
 			this.panel2.SuspendLayout();
 			this.SuspendLayout();
@@ -264,7 +265,7 @@ namespace ClassLibrary
 			// checkBoxVerboseOutput
 			// 
 			this.checkBoxVerboseOutput.AutoSize = true;
-			this.checkBoxVerboseOutput.Location = new System.Drawing.Point(25, 393);
+			this.checkBoxVerboseOutput.Location = new System.Drawing.Point(144, 399);
 			this.checkBoxVerboseOutput.Name = "checkBoxVerboseOutput";
 			this.checkBoxVerboseOutput.Size = new System.Drawing.Size(226, 17);
 			this.checkBoxVerboseOutput.TabIndex = 3;
@@ -272,11 +273,23 @@ namespace ClassLibrary
 			this.checkBoxVerboseOutput.UseVisualStyleBackColor = true;
 			this.checkBoxVerboseOutput.CheckedChanged += new System.EventHandler(this.checkBoxVerboseOutput_CheckedChanged);
 			// 
+			// checkBoxOutputEnabled
+			// 
+			this.checkBoxOutputEnabled.AutoSize = true;
+			this.checkBoxOutputEnabled.Location = new System.Drawing.Point(25, 399);
+			this.checkBoxOutputEnabled.Name = "checkBoxOutputEnabled";
+			this.checkBoxOutputEnabled.Size = new System.Drawing.Size(100, 17);
+			this.checkBoxOutputEnabled.TabIndex = 6;
+			this.checkBoxOutputEnabled.Text = "Output Enabled";
+			this.checkBoxOutputEnabled.UseVisualStyleBackColor = true;
+			this.checkBoxOutputEnabled.CheckedChanged += new System.EventHandler(this.checkBoxOutputEnabled_CheckedChanged);
+			// 
 			// SolutionConfigForm
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.ClientSize = new System.Drawing.Size(531, 469);
+			this.Controls.Add(this.checkBoxOutputEnabled);
 			this.Controls.Add(this.checkBoxVerboseOutput);
 			this.Controls.Add(this.checkBoxPromptForCheckout);
 			this.Controls.Add(this.buttonCancel);
@@ -322,5 +335,6 @@ namespace ClassLibrary
 		private System.Windows.Forms.Button buttonCancel;
 		private System.Windows.Forms.CheckBox checkBoxPromptForCheckout;
 		private System.Windows.Forms.CheckBox checkBoxVerboseOutput;
+		private System.Windows.Forms.CheckBox checkBoxOutputEnabled;
 	}
 }

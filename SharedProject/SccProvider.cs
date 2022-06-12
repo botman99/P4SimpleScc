@@ -86,7 +86,7 @@ namespace P4SimpleScc
 
 		private static MsVsShell.Package package;
 
-		public static Guid OutputPaneGuid = new Guid();
+		public static Guid OutputPaneGuid = Guid.Empty;
 
 		public string solutionDirectory = "";
 		public string solutionFile = "";
@@ -102,6 +102,7 @@ namespace P4SimpleScc
 		public string P4User = "";
 		public string P4Client = "";
 		public bool bVerboseOutput = false;
+		public static bool bOutputEnabled = false;
 
 		public static bool P4SimpleSccConfigDirty = false;  // has the solution configuration for this solution been modified (and needs to be saved)?
 
@@ -197,7 +198,7 @@ namespace P4SimpleScc
 				}
 			}
 
-			if (GetSolutionFileName() != null)
+			if (GetSolutionFileName() != null)  // normally the solution won't be loaded at this point, but handle it just in case
 			{
 				if (solutionDirectory != null && solutionDirectory.Length > 0)  // was solution already opened by the time we were loaded?
 				{
@@ -261,8 +262,6 @@ namespace P4SimpleScc
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-			IVsOutputWindow output = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
-
 			MsVsShell.OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as MsVsShell.OleMenuCommandService;
 			if (mcs != null)
 			{
@@ -291,18 +290,6 @@ namespace P4SimpleScc
 				{
 					rscp.RegisterSourceControlProvider(GuidList.guidSccProvider);
 				}
-
-				// Create a new output pane.
-				bool visible = true;
-				bool clearWithSolution = false;
-				output.CreatePane(ref OutputPaneGuid, "P4SimpleScc", Convert.ToInt32(visible), Convert.ToInt32(clearWithSolution));
-
-				P4SimpleSccOutput("P4SimpleScc enabled\n");
-			}
-			else
-			{
-				// Remove the existing output pane
-				output.DeletePane(ref OutputPaneGuid);
 			}
 		}
 
@@ -431,6 +418,18 @@ namespace P4SimpleScc
 					Config.Load(config_string);
 
 					Config.Get(Config.KEY.SolutionConfigType, ref SolutionConfigType);
+					Config.Get(Config.KEY.SolutionConfigCheckOutOnEdit, ref bCheckOutOnEdit);
+					Config.Get(Config.KEY.SolutionConfigPromptForCheckout, ref bPromptForCheckout);
+
+					// NOTE: We don't initialize P4Port, P4User or P4Client here as these are handled in SetP4SettingsForSolution based on SolutionConfigType setting
+
+					Config.Get(Config.KEY.SolutionConfigVerboseOutput, ref bVerboseOutput);
+					Config.Get(Config.KEY.SolutionConfigOutputEnabled, ref bOutputEnabled);
+				}
+
+				if (bOutputEnabled)
+				{
+					CreateOutputPane();
 				}
 
 				if (SolutionConfigType != 0)
@@ -575,7 +574,15 @@ namespace P4SimpleScc
 						{
 							FilenameList.Add(Filename);
 
-							if (!IsCheckedOut(Filename))
+							bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+							bool bCanFileBeCheckedOut = true;
+							if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+							{
+								bCanFileBeCheckedOut = false;
+							}
+
+							if (!bIsCheckedOut && bCanFileBeCheckedOut)
 							{
 								bAllFilesAreCheckedOut = false;
 							}
@@ -870,7 +877,7 @@ Not ready for release yet */
 			int pos_y = -1;
 			Config.Get(Config.KEY.SolutionConfigDialogPosY, ref pos_y);
 
-			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bCheckOutOnEdit, bPromptForCheckout, bVerboseOutput, P4Port, P4User, P4Client, VerboseOutput);
+			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bCheckOutOnEdit, bPromptForCheckout, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
 
 			System.Windows.Forms.DialogResult result = Dialog.ShowDialog();
 
@@ -889,6 +896,16 @@ Not ready for release yet */
 				bCheckOutOnEdit = Dialog.bCheckOutOnEdit;
 				bPromptForCheckout = Dialog.bPromptForCheckout;
 				bVerboseOutput = Dialog.bVerboseOutput;
+				bOutputEnabled = Dialog.bOutputEnabled;
+
+				if (bOutputEnabled && (OutputPaneGuid == Guid.Empty))  // if output is enabled and there's no output pane, then create one
+				{
+					CreateOutputPane();
+				}
+				else if (!bOutputEnabled && (OutputPaneGuid != Guid.Empty))  // else if output is not enabled and there is an output pane, then remove it
+				{
+					RemoveOutputPane();
+				}
 
 				if (Dialog.SolutionConfigType == 2)  // manual settings
 				{
@@ -907,12 +924,14 @@ Not ready for release yet */
 				Config.Set(Config.KEY.SolutionConfigType, SolutionConfigType);
 				Config.Set(Config.KEY.SolutionConfigCheckOutOnEdit, bCheckOutOnEdit);
 				Config.Set(Config.KEY.SolutionConfigPromptForCheckout, bPromptForCheckout);
-				Config.Set(Config.KEY.SolutionConfigVerboseOutput, bVerboseOutput);
 
 				// these will be blank for all configurations except 'manual settings' (SetP4SettingsForSolution will re-initialize them at runtime)
 				Config.Set(Config.KEY.SolutionConfigDialogP4Port, P4Port);
 				Config.Set(Config.KEY.SolutionConfigDialogP4User, P4User);
 				Config.Set(Config.KEY.SolutionConfigDialogP4Client, P4Client);
+
+				Config.Set(Config.KEY.SolutionConfigVerboseOutput, bVerboseOutput);
+				Config.Set(Config.KEY.SolutionConfigOutputEnabled, bOutputEnabled);
 
 				P4SimpleSccConfigDirty = true;  // we need to write these to the solution .suo file
 
@@ -947,16 +966,12 @@ Not ready for release yet */
 				P4User = "";
 				P4Client = "";
 
-				Config.Get(Config.KEY.SolutionConfigCheckOutOnEdit, ref bCheckOutOnEdit);
-				Config.Get(Config.KEY.SolutionConfigPromptForCheckout, ref bPromptForCheckout);
-				Config.Get(Config.KEY.SolutionConfigVerboseOutput, ref bVerboseOutput);
-
 				if (SolutionConfigType == 1)  // if automatic settings
 				{
 					P4Command p4 = new P4Command();
 					p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client, out string verbose);
 
-					if (bVerboseOutput)
+					if (bVerboseOutput)  // we don't need to worry about stderr output here since "p4 set" should never fail to run (as long as P4V is installed)
 					{
 						if (!verbose.EndsWith("\n"))
 						{
@@ -965,7 +980,7 @@ Not ready for release yet */
 						P4SimpleSccOutput(verbose);
 					}
 				}
-				if (SolutionConfigType == 2)  // if manual settings
+				else if (SolutionConfigType == 2)  // if manual settings
 				{
 					// always override all settings with the manual settings (from the Config class)
 					Config.Get(Config.KEY.SolutionConfigDialogP4Port, ref P4Port);
@@ -1022,7 +1037,7 @@ Not ready for release yet */
 					P4SimpleSccOutput("Connection to server failed!\n");
 					P4SimpleSccOutput(stderr);
 
-					string message = "Connection to server failed.  Use \"Show output from:\" set to 'P4SimpleScc' in Output window for more details.";
+					string message = "Connection to server failed.\n" + stderr;
 					MsVsShell.VsShellUtilities.ShowMessageBox(package, message, "P4SimpleScc Error", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
 				}
 				else
@@ -1032,17 +1047,18 @@ Not ready for release yet */
 			}
 		}
 
-		public bool IsCheckedOut(string Filename)
+		public bool IsCheckedOut(string Filename, out string stderr)
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
+			stderr = "";
 			bool status = false;
 
 			if (SolutionConfigType != 0)  // not disabled?
 			{
 				P4Command p4 = new P4Command();
 
-				status = p4.IsCheckedOut(Filename, out string stdout, out string stderr, out string verbose);  // ignore stderr here since failure will be treated as if file is not checked out
+				status = p4.IsCheckedOut(Filename, out string stdout, out stderr, out string verbose);  // ignore stderr here since failure will be treated as if file is not checked out
 
 				if (bVerboseOutput)
 				{
@@ -1086,15 +1102,18 @@ Not ready for release yet */
 
 					if (stderr != null && stderr.Length > 0)
 					{
-						string message = String.Format("edit of '{0}' failed.\n", Filename);
+						string message = String.Format("Check out of '{0}' failed.\n", Filename);
 						P4SimpleSccOutput(message);
 						P4SimpleSccOutput(stderr);
+
+						string dialog_message = message + stderr;
+						MsVsShell.VsShellUtilities.ShowMessageBox(package, dialog_message, "P4SimpleScc Error", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
 
 						return false;
 					}
 					else
 					{
-						string message = String.Format("edit '{0}' successful.\n", Filename);
+						string message = String.Format("Check out of '{0}' successful.\n", Filename);
 						P4SimpleSccOutput(message);
 
 						return true;
@@ -1105,41 +1124,84 @@ Not ready for release yet */
 			return true;  // return good status if P4SimpleScc is disabled for this solution
 		}
 
-		public void VerboseOutput(string message, bool bInVerboseOutput)
+		public void VerboseOutput(string message)
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
+			if (OutputPaneGuid == Guid.Empty)
+			{
+				CreateOutputPane();
+			}
+
 			string output = message;
 
-			if (bInVerboseOutput)
+			if (!message.EndsWith("\n"))  // add newline character at end if there isn't one
 			{
-				if (!message.EndsWith("\n"))
-				{
-					output += "\n";
-				}
-				P4SimpleSccOutput(output);
+				output += "\n";
 			}
+
+			P4SimpleSccOutput(output, true);
+		}
+
+		/// <summary>
+		/// This function will create the P4SimpleScc Output window (for logging purposes for P4 commands)
+		/// </summary>
+		private void CreateOutputPane()
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (OutputPaneGuid != Guid.Empty)
+			{
+				return;
+			}
+
+			// Create a new output pane.
+			IVsOutputWindow output = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+
+			OutputPaneGuid = Guid.NewGuid();
+
+			bool visible = true;
+			bool clearWithSolution = false;
+			output.CreatePane(ref OutputPaneGuid, "P4SimpleScc", Convert.ToInt32(visible), Convert.ToInt32(clearWithSolution));
+		}
+
+		/// <summary>
+		/// This function will remove the P4SimpleScc Output window (for logging purposes for P4 commands)
+		/// </summary>
+		private void RemoveOutputPane()
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			IVsOutputWindow output = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+
+			// Remove the existing output pane
+			output.DeletePane(ref OutputPaneGuid);
+
+			OutputPaneGuid = Guid.Empty;
 		}
 
 		/// <summary>
 		/// This function will output a line of text to the P4SimpleScc Output window (for logging purposes for P4 commands)
 		/// </summary>
 		/// <param name="text">text string to be output to the P4SimpleScc Output window (user must include \n character for newline at the end of the text string)
-		public static void P4SimpleSccOutput(string text)  // user must include \n newline characters
+		public static void P4SimpleSccOutput(string text, bool bForceOutput = false)  // user must include \n newline characters
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-			IVsOutputWindow output = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
-
-			if (output != null)
+			if (bOutputEnabled || bForceOutput)
 			{
-				// Retrieve the output pane.
-				output.GetPane(ref OutputPaneGuid, out IVsOutputWindowPane OutputPane);
+				IVsOutputWindow output = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
 
-				if (OutputPane != null)
+				if (output != null)
 				{
-					OutputPane.OutputString(DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss - "));
-					OutputPane.OutputString(text);
+					// Retrieve the output pane.
+					output.GetPane(ref OutputPaneGuid, out IVsOutputWindowPane OutputPane);
+
+					if (OutputPane != null)
+					{
+						OutputPane.OutputString(DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss - "));
+						OutputPane.OutputString(text);
+					}
 				}
 			}
 		}

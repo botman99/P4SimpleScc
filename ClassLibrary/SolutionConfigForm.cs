@@ -22,6 +22,7 @@ namespace ClassLibrary
 		public bool bCheckOutOnEdit = true;
 		public bool bPromptForCheckout = false;
 		public bool bVerboseOutput = false;
+		public bool bOutputEnabled = false;
 
 		public string P4Port = "";
 		public string P4User = "";
@@ -32,10 +33,10 @@ namespace ClassLibrary
 		private string ManualP4User = "";
 		private string ManualP4Client = "";
 
-		public delegate void VerboseOutputDelegate(string message, bool bVerboseOutput);
+		public delegate void VerboseOutputDelegate(string message);
 		private VerboseOutputDelegate VerboseOutput = null;
 
-		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInVerboseOutput, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
+		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInVerboseOutput, bool bInOutputEnabled, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
 		{
 			bWindowInitComplete = false;  // we aren't done initializing the window yet
 
@@ -48,6 +49,7 @@ namespace ClassLibrary
 			bCheckOutOnEdit = bInCheckOutOnEdit;
 			bPromptForCheckout = bInPromptForCheckout;
 			bVerboseOutput = bInVerboseOutput;
+			bOutputEnabled = bInOutputEnabled;
 
 			P4Port = InP4Port;
 			P4User = InP4User;
@@ -81,6 +83,9 @@ namespace ClassLibrary
 
 			checkBoxPromptForCheckout.Checked = bPromptForCheckout;
 			checkBoxVerboseOutput.Checked = bVerboseOutput;
+			checkBoxOutputEnabled.Checked = bOutputEnabled;
+
+			checkBoxVerboseOutput.Enabled = bOutputEnabled;
 
 			PosX = InPosX;
 			PosY = InPosY;
@@ -148,9 +153,10 @@ namespace ClassLibrary
 				P4Command p4 = new P4Command();
 				p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client, out string verbose);
 
-				if (VerboseOutput != null)
+				// if we have enabled the 'bVerboseOutput' setting locally in this dialog box, we need to output the results of the "p4 set" command here...
+				if ((VerboseOutput != null) && bOutputEnabled && bVerboseOutput)
 				{
-					VerboseOutput(verbose, bVerboseOutput);
+					VerboseOutput(verbose);
 				}
 
 				TextBoxEnable(false);
@@ -210,6 +216,12 @@ namespace ClassLibrary
 		private void checkBoxPromptForCheckout_CheckedChanged(object sender, EventArgs e)
 		{
 			bPromptForCheckout = checkBoxPromptForCheckout.Checked;
+		}
+
+		private void checkBoxOutputEnabled_CheckedChanged(object sender, EventArgs e)
+		{
+			bOutputEnabled = checkBoxOutputEnabled.Checked;
+			checkBoxVerboseOutput.Enabled = bOutputEnabled;
 		}
 
 		private void checkBoxVerboseOutput_CheckedChanged(object sender, EventArgs e)
