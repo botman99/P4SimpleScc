@@ -576,13 +576,13 @@ namespace P4SimpleScc
 
 							bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
 
-							bool bCanFileBeCheckedOut = true;
+							bool bShouldIgnoreStatus = false;
 							if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 							{
-								bCanFileBeCheckedOut = false;
+								bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
 							}
 
-							if (!bIsCheckedOut && bCanFileBeCheckedOut)
+							if (!bIsCheckedOut && !bShouldIgnoreStatus)
 							{
 								bAllFilesAreCheckedOut = false;
 							}
