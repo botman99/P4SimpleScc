@@ -565,27 +565,34 @@ namespace P4SimpleScc
 			{
 				foreach (VSITEMSELECTION item in sel)
 				{
-					IVsProject Project = (IVsProject)item.pHier;
-
 					string Filename = "";
-					if (Project.GetMkDocument(item.itemid, out Filename) == VSConstants.S_OK)
+
+					if ((item.pHier == null) || ((item.pHier as IVsSolution) != null))
 					{
-						if (Filename != "")
+						Filename = GetSolutionFileName();
+					}
+					else if ((IVsProject)item.pHier != null)
+					{
+						IVsProject Project = (IVsProject)item.pHier;
+
+						Project.GetMkDocument(item.itemid, out Filename);
+					}
+
+					if (Filename != "")
+					{
+						FilenameList.Add(Filename);
+
+						bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+						bool bShouldIgnoreStatus = false;
+						if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 						{
-							FilenameList.Add(Filename);
+							bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+						}
 
-							bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
-
-							bool bShouldIgnoreStatus = false;
-							if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
-							{
-								bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
-							}
-
-							if (!bIsCheckedOut && !bShouldIgnoreStatus)
-							{
-								bAllFilesAreCheckedOut = false;
-							}
+						if (!bIsCheckedOut && !bShouldIgnoreStatus)
+						{
+							bAllFilesAreCheckedOut = false;
 						}
 					}
 				}
