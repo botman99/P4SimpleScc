@@ -379,7 +379,7 @@ namespace ClassLibrary
 
 			if (stderr != null && stderr.Length > 0)
 			{
-				if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+				if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 				{
 					return CheckOutStatus.FileNotInSourceControl;
 				}

@@ -328,7 +328,7 @@ namespace P4SimpleScc
 								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
 
 								bool bShouldIgnoreStatus = false;
-								if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+								if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 								{
 									bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
 								}
@@ -414,7 +414,7 @@ namespace P4SimpleScc
 								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
 
 								bool bShouldIgnoreStatus = false;
-								if (stderr.Contains("is not under client's root") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+								if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 								{
 									bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
 								}
