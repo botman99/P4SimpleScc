@@ -363,6 +363,10 @@ namespace ClassLibrary
 				{
 					return true;
 				}
+				else if (action == "add")  // if open for add then we don't need to do anything (GitHub issue #4)
+				{
+					return true;
+				}
 			}
 
 			return false;
