@@ -295,9 +295,10 @@ namespace ClassLibrary
 			}
 		}
 
-		public void ServerConnect(out string stdout, out string stderr, out string verbose)
+		public void ServerConnect(out string stdout, out string stderr, out string verbose, out bool bIsNotAllWrite)
 		{
 			verbose = "";
+			bIsNotAllWrite = true;
 
 			Run("info -s", port, "", "", out stdout, out stderr, out string info_verbose);  // 'info' needs to run on the specified server (to make sure the server is valid)
 			verbose += info_verbose;
@@ -339,6 +340,15 @@ namespace ClassLibrary
 				stderr = String.Format("P4CLIENT workspace '{0}' is not valid on server.\n", workspace);
 				return;
 			}
+
+			string Options = "";
+			if (!GetField(stdout, "Options:", out Options))
+			{
+				stderr = String.Format("P4CLIENT workspace '{0}' is not valid on server.\n", workspace);
+				return;
+			}
+
+			bIsNotAllWrite = Options.Contains("noallwrite") ? true : false;
 
 			// check if Root directory exists on this machine
 			if (!Directory.Exists(Root))

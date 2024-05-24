@@ -106,6 +106,8 @@ namespace P4SimpleScc
 
 		public static bool P4SimpleSccConfigDirty = false;  // has the solution configuration for this solution been modified (and needs to be saved)?
 
+		public static bool bIsNotAllWrite = true;
+
 		private static char[] InvalidChars;
 		private	List<string> FilenameList;
 
@@ -1028,7 +1030,7 @@ Not ready for release yet */
 			{
 				P4Command p4 = new P4Command();
 
-				p4.ServerConnect(out string stdout, out string stderr, out string verbose);
+				p4.ServerConnect(out string stdout, out string stderr, out string verbose, out bIsNotAllWrite);
 
 				if (bVerboseOutput)
 				{
@@ -1063,6 +1065,16 @@ Not ready for release yet */
 
 			if (SolutionConfigType != 0)  // not disabled?
 			{
+				if (bIsNotAllWrite)
+				{
+					FileInfo info = new FileInfo(Filename);
+
+					if (!info.IsReadOnly)
+					{
+						return true;
+					}
+				}
+
 				P4Command p4 = new P4Command();
 
 				status = p4.IsCheckedOut(Filename, out string stdout, out stderr, out string verbose);  // ignore stderr here since failure will be treated as if file is not checked out
