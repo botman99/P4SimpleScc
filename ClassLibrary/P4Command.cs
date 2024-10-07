@@ -233,9 +233,17 @@ namespace ClassLibrary
 
 		public void RunP4Set(string solutionDirectory, out string P4Port, out string P4User, out string P4Client, out string verbose)
 		{
+			string P4Config;
+			RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client, out P4Config, out verbose);
+		}
+
+
+		public void RunP4Set(string solutionDirectory, out string P4Port, out string P4User, out string P4Client, out string P4Config, out string verbose)
+		{
 			P4Port = "";
 			P4User = "";
 			P4Client = "";
+			P4Config = "";
 			verbose = "";
 
 			if (solutionDirectory == null || solutionDirectory == "")
@@ -290,6 +298,16 @@ namespace ClassLibrary
 						}
 
 						P4Client = line.Substring(9);
+					}
+					else if (line.Contains("P4CONFIG="))
+					{
+						int pos = line.IndexOf(" (");
+						if (pos >= 0)  // if the line contains " (" then strip it and the following text
+						{
+							line = line.Remove(pos).Trim();
+						}
+
+						P4Config = line.Substring(9);
 					}
 				}
 			}

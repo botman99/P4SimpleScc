@@ -18,7 +18,8 @@ using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
-
+using Microsoft;
+using ClassLibrary;
 
 namespace P4SimpleScc
 {
@@ -26,7 +27,8 @@ namespace P4SimpleScc
 	public class SccProviderService :
 		IVsSccProvider,				// Required for provider registration with source control manager
 		IVsSccManager2,				// Base source control functionality interface
-		IVsSolutionEvents,			// We'll register for solution events, these are usefull for source control
+		IVsSolutionEvents,			// We'll register for solution events, these are useful for source control
+		IVsSolutionEvents7,			// We'll register for folder events, these are useful for source control
 		IVsQueryEditQuerySave2,		// Required to allow editing of controlled files
 		IDisposable 
 	{
@@ -221,64 +223,111 @@ namespace P4SimpleScc
 
 		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
 		{
-			ThreadHelper.ThrowIfNotOnUIThread();
-
-			if (!_sccProvider.bSolutionLoadedOutputDone && (_sccProvider.GetSolutionFileName() != null))
-			{
-				if (_sccProvider.solutionDirectory != null && _sccProvider.solutionDirectory.Length > 0)
-				{
-					string message = String.Format("Loaded solution: {0}\n", _sccProvider.solutionFile);
-					SccProvider.P4SimpleSccOutput(message);
-
-					_sccProvider.bSolutionLoadedOutputDone = true;
-				}
-			}
-
-			return VSConstants.S_OK;
+			return OnAfterCloseSolutionOrFolder();
 		}
 
 		public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel)
-		{
-			return VSConstants.S_OK;
-		}
+				{
+			return OnQueryCloseSolutionOrFolder();
+			}
 
 		public int OnBeforeCloseSolution(object pUnkReserved)
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
-
-			if (_sccProvider.GetSolutionFileName() != null)
-			{
-				if (_sccProvider.solutionDirectory != null && _sccProvider.solutionDirectory.Length > 0)
-				{
-					string message = String.Format("Unloading solution: {0}\n", _sccProvider.solutionFile);
-					SccProvider.P4SimpleSccOutput(message);
-				}
-			}
-
-			// set all configuration settings back to uninitialized
-			_sccProvider.SolutionConfigType = 0;
-			_sccProvider.bCheckOutOnEdit = true;
-			_sccProvider.bPromptForCheckout = false;
-
-			_sccProvider.P4Port = "";
-			_sccProvider.P4User = "";
-			_sccProvider.P4Client = "";
-
-			_sccProvider.solutionDirectory = "";
-			_sccProvider.solutionFile = "";
-
-			_sccProvider.bSolutionLoadedOutputDone = false;
-
-			return VSConstants.S_OK;
+			return OnBeforeCloseSolutionOrFolder();
 		}
 
 		public int OnAfterCloseSolution(object pUnkReserved)
 		{
-			return VSConstants.S_OK;
+			return OnAfterCloseSolutionOrFolder();
 		}
 
 		#endregion  // IVsSolutionEvents
 
+
+		//----------------------------------------------------------------------------
+		// IVsSolutionEvents7 specific functions
+		//--------------------------------------------------------------------------------
+		#region IVsSolutionEvents7 interface functions
+		public void OnAfterOpenFolder(string folderPath)
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			// This is a folder, so we don't have a solution to load user options from.
+			// We might, however, have a P4CONFIG file, in which case we want to default the solution config to automatic.
+			// Start with checking whether P4 is configured to look for one.
+			string P4Config;
+			string P4Port;
+			string P4User;
+			string P4Client;
+			P4Command p4 = new P4Command();
+			p4.RunP4Set(folderPath, out P4Port, out P4User, out P4Client, out P4Config, out string verbose);
+			if (!string.IsNullOrEmpty(P4Config))
+			{
+				// The P4CONFIG environment variable is set, now go look for the file.
+				string currentPath = folderPath;
+
+				// Loop until we reach the root directory.
+				while (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath))
+				{
+					string filePath = Path.Combine(currentPath, P4Config);
+
+					if (File.Exists(filePath))
+					{
+						// P4CONFIG exists! Start out defaulting to automatic and set up P4 settings.
+						_sccProvider.SolutionConfigType = 1;
+						_sccProvider.SetP4SettingsForSolution(folderPath);
+						break;
+					}
+
+					string parentPath = Directory.GetParent(currentPath).FullName;
+					if (parentPath == currentPath || string.IsNullOrEmpty(Directory.GetParent(parentPath).Name))
+					{
+						break;
+					}
+					currentPath = parentPath;
+				}
+			}
+
+				var returnCode = OnAfterOpenSolutionOrFolder();
+			if (returnCode != VSConstants.S_OK)
+			{
+				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
+			}
+		}
+
+		public void OnQueryCloseFolder(string folderPath, ref int pfCancel)
+		{
+			var returnCode = OnQueryCloseSolutionOrFolder();
+			if (returnCode != VSConstants.S_OK)
+			{
+				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
+			}
+		}
+
+		public void OnBeforeCloseFolder(string folderPath)
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+			var returnCode = OnBeforeCloseSolutionOrFolder();
+			if (returnCode != VSConstants.S_OK)
+			{
+				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
+			}
+		}
+
+		public void OnAfterCloseFolder(string folderPath)
+		{
+			var returnCode = OnAfterCloseSolutionOrFolder();
+			if (returnCode != VSConstants.S_OK)
+			{
+				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
+			}
+		}
+
+		[Obsolete("This API is no longer supported by Visual Studio.")]
+		public void OnAfterLoadAllDeferredProjects()
+		{ }
+		#endregion	// IVsSolutionEvents7
 
 		//----------------------------------------------------------------------------
 		// IVsQueryEditQuerySave2 specific functions
@@ -497,6 +546,63 @@ namespace P4SimpleScc
 
 		#endregion  // IVsQueryEditQuerySave2
 
+		private int OnAfterOpenSolutionOrFolder()
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (!_sccProvider.bSolutionLoadedOutputDone && (_sccProvider.GetSolutionFileName() != null))
+			{
+				if (_sccProvider.solutionDirectory != null && _sccProvider.solutionDirectory.Length > 0)
+				{
+					string message = String.Format("Loaded solution: {0}\n", _sccProvider.solutionFile);
+					SccProvider.P4SimpleSccOutput(message);
+
+					_sccProvider.bSolutionLoadedOutputDone = true;
+				}
+			}
+
+			return VSConstants.S_OK;
+		}
+
+		private int OnBeforeCloseSolutionOrFolder()
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (_sccProvider.GetSolutionFileName() != null)
+			{
+				if (_sccProvider.solutionDirectory != null && _sccProvider.solutionDirectory.Length > 0)
+				{
+					string message = String.Format("Unloading solution: {0}\n", _sccProvider.solutionFile);
+					SccProvider.P4SimpleSccOutput(message);
+				}
+			}
+
+			// set all configuration settings back to uninitialized
+			_sccProvider.SolutionConfigType = 0;
+			_sccProvider.bCheckOutOnEdit = true;
+			_sccProvider.bPromptForCheckout = false;
+
+			_sccProvider.P4Port = "";
+			_sccProvider.P4User = "";
+			_sccProvider.P4Client = "";
+
+			_sccProvider.solutionDirectory = "";
+			_sccProvider.solutionFile = "";
+
+			_sccProvider.bSolutionLoadedOutputDone = false;
+
+			return VSConstants.S_OK;
+		}
+
+		private int OnAfterCloseSolutionOrFolder()
+		{
+			return VSConstants.S_OK;
+		}
+
+		private int OnQueryCloseSolutionOrFolder()
+		{
+			return VSConstants.S_OK;
+		}
 
         /// <summary>
         /// Returns whether this source control provider is the active scc provider.
