@@ -223,7 +223,7 @@ namespace P4SimpleScc
 
 		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
 		{
-			return OnAfterCloseSolutionOrFolder();
+			return OnAfterOpenSolutionOrFolder();
 		}
 
 		public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel)
