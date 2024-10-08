@@ -439,21 +439,21 @@ namespace P4SimpleScc
 					IVsRegisterScciProvider rscp = (IVsRegisterScciProvider)GetService(typeof(IVsRegisterScciProvider));
 					rscp.RegisterSourceControlProvider(GuidList.guidSccProvider);
 
-					GetSolutionFileName();
-
-					if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
-					{
-						string message = String.Format("Loaded solution: {0}\n", solutionFile);
-						SccProvider.P4SimpleSccOutput(message);
-
-						bSolutionLoadedOutputDone = true;
-					}
+					GetSolutionFileName();					
 
 					SetP4SettingsForSolution(solutionDirectory);
 
 					ServerConnect();
 				}
-			}
+
+                if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
+                {
+                    string message = String.Format("Loaded solution: {0}\n", solutionFile);
+                    SccProvider.P4SimpleSccOutput(message);
+
+                    bSolutionLoadedOutputDone = true;
+                }
+            }
 
 			return VSConstants.S_OK;
 		}
