@@ -5,7 +5,6 @@
 
 using System;
 using System.IO;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -17,7 +16,6 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Settings;
 using Microsoft.VisualStudio.Shell.Settings;
 using PackageAutoLoadFlags = Microsoft.VisualStudio.AsyncPackageHelpers.PackageAutoLoadFlags;
-using EnvDTE80;
 
 using MsVsShell = Microsoft.VisualStudio.Shell;
 
@@ -93,6 +91,9 @@ namespace P4SimpleScc
 		public string solutionUserOptions = "";
 
 		public bool bSolutionLoadedOutputDone = false;
+
+		public bool bReadUserOptionsCalled = false;  // this allows us to determine if user settings were attempted to be loaded
+		public bool bUserSettingsWasEmpty = false;  // previously, if P4SimpleScc was disabled, settings were removed from the .sou file in the .vs folder, this bool will be 'true' if the settings are missing
 
 		// P4SimpleScc solution configuration settings...
 		public int SolutionConfigType = 0;  // 0 = disabled, 1 = automatic, 2 = manual settings
@@ -200,11 +201,18 @@ namespace P4SimpleScc
 				}
 			}
 
-			if (GetSolutionFileName() != null)  // normally the solution won't be loaded at this point, but handle it just in case
+			if (GetSolutionFileName() != null)  // this is the path that will be taken when the solution is opened by double clicking or being specified as a commandline argument when launching Visual Studio
 			{
 				if (solutionDirectory != null && solutionDirectory.Length > 0)  // was solution already opened by the time we were loaded?
 				{
-					if (!bSolutionLoadedOutputDone)
+					IVsSolutionPersistence solPersistence = (IVsSolutionPersistence)GetService(typeof(IVsSolutionPersistence));
+					if (solPersistence != null)
+					{
+						// see if there are User Opts for this solution (this will load the Config settings and enable this provider if this solution is controlled by this provider
+						solPersistence.LoadPackageUserOpts(this, _strSolutionUserOptionsKey);
+					}
+
+	                if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
 					{
 						string message = String.Format("Loaded solution: {0}\n", solutionFile);
 						SccProvider.P4SimpleSccOutput(message);
@@ -212,12 +220,7 @@ namespace P4SimpleScc
 						bSolutionLoadedOutputDone = true;
 					}
 
-					IVsSolutionPersistence solPersistence = (IVsSolutionPersistence)GetService(typeof(IVsSolutionPersistence));
-					if (solPersistence != null)
-					{
-						// see if there are User Opts for this solution (this will load the Config settings and enable this provider if this solution is controlled by this provider
-						solPersistence.LoadPackageUserOpts(this, _strSolutionUserOptionsKey);
-					}
+					AfterOpenSolutionOrFolder();
 				}
 			}
 		}
@@ -373,20 +376,17 @@ namespace P4SimpleScc
 
 			if (pszKey == _strSolutionUserOptionsKey)
 			{
-				if (SolutionConfigType != 0)
-				{
-					Config.Set(Config.KEY.SolutionConfigType, SolutionConfigType);
+				Config.Set(Config.KEY.SolutionConfigType, SolutionConfigType);
 
-					Config.Save(out string config_string);
+				Config.Save(out string config_string);
 
-					byte[] buffer = new byte[config_string.Length];
-					uint BytesWritten = 0;
+				byte[] buffer = new byte[config_string.Length];
+				uint BytesWritten = 0;
 
-					System.Text.UTF8Encoding encoding = new System.Text.UTF8Encoding();
-					encoding.GetBytes(config_string, 0, config_string.Length, buffer, 0);
+				System.Text.UTF8Encoding encoding = new System.Text.UTF8Encoding();
+				encoding.GetBytes(config_string, 0, config_string.Length, buffer, 0);
 
-					pOptionsStream.Write(buffer, (uint)config_string.Length, out BytesWritten);
-				}
+				pOptionsStream.Write(buffer, (uint)config_string.Length, out BytesWritten);
 
 				P4SimpleSccConfigDirty = false;
 			}
@@ -402,6 +402,8 @@ namespace P4SimpleScc
 			// in LoadUserOptions() as being written by this package has been found in the suo file. 
 			// Note this can be during opening a new solution, or may be during merging of 2 solutions.
 			// A good source control provider may need to persist this data until OnAfterOpenSolution or OnAfterMergeSolution is called
+
+			bReadUserOptionsCalled = true;
 
 			string config_string = "";
 
@@ -428,23 +430,17 @@ namespace P4SimpleScc
 					Config.Get(Config.KEY.SolutionConfigVerboseOutput, ref bVerboseOutput);
 					Config.Get(Config.KEY.SolutionConfigOutputEnabled, ref bOutputEnabled);
 				}
+				else
+				{
+					bUserSettingsWasEmpty = true;  // no settings in the .suo file means P4SimpleScc was previously disabled (prior to verson 2.1)
+				}
 
 				if (bOutputEnabled)
 				{
 					CreateOutputPane();
 				}
 
-				if (SolutionConfigType != 0)
-				{
-					IVsRegisterScciProvider rscp = (IVsRegisterScciProvider)GetService(typeof(IVsRegisterScciProvider));
-					rscp.RegisterSourceControlProvider(GuidList.guidSccProvider);
-
-					GetSolutionFileName();					
-
-					SetP4SettingsForSolution(solutionDirectory);
-
-					ServerConnect();
-				}
+				GetSolutionFileName();					
 
                 if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
                 {
@@ -453,6 +449,16 @@ namespace P4SimpleScc
 
                     bSolutionLoadedOutputDone = true;
                 }
+
+				if (SolutionConfigType != 0)
+				{
+					IVsRegisterScciProvider rscp = (IVsRegisterScciProvider)GetService(typeof(IVsRegisterScciProvider));
+					rscp.RegisterSourceControlProvider(GuidList.guidSccProvider);
+
+					SetP4SettingsForSolution(solutionDirectory);
+
+					ServerConnect();
+				}
             }
 
 			return VSConstants.S_OK;
@@ -488,6 +494,66 @@ namespace P4SimpleScc
 		}
 
 		#endregion  // IVsPersistSolutionProps
+
+		public void AfterOpenSolutionOrFolder()
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (bReadUserOptionsCalled && bUserSettingsWasEmpty)  // dirty hack to handle P4SimpleScc being disabled for a solution prior to version 2.1
+			{
+				P4SimpleSccConfigDirty = true;  // we need to save these settings (so that we save the 'disabled' setting)
+			}
+
+			if (GetSolutionFileName() != null && !String.IsNullOrEmpty(solutionDirectory))
+			{
+				if (!bReadUserOptionsCalled)  // don't automatically change anything if previous solution settings exists
+				{
+					// We may have a P4CONFIG file (https://www.perforce.com/manuals/v23.1/cmdref/Content/CmdRef/P4CONFIG.html),
+					// in which case we want to default the solution config to automatic.
+					// Start with checking whether P4 is even configured to look for one.
+					ClassLibrary.P4Command p4 = new ClassLibrary.P4Command();
+					p4.RunP4Set(solutionDirectory, out string P4Port, out string P4User, out string P4Client, out string P4Config, out string verbose);
+					if (!string.IsNullOrEmpty(P4Config))
+					{
+						// The P4CONFIG environment variable is set, now go look for the file.
+						string currentPath = solutionDirectory;
+
+						// Loop until we reach the root directory.
+						while (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath))
+						{
+							string filePath = Path.Combine(currentPath, P4Config);
+
+							if (File.Exists(filePath))
+							{
+								// P4CONFIG exists! Start out defaulting to automatic and set up P4 settings.
+								SolutionConfigType = 1;
+								SetP4SettingsForSolution(solutionDirectory);
+
+								p4.ServerConnect(out string stdout, out string stderr, out verbose, out bool bIsNotAllWrite);
+
+								if (stderr != null && stderr.Length > 0) // if the P4CONFIG settings were not valid...
+								{
+									SolutionConfigType = 0;  // revert back to P4SimpleScc being disabled
+								}
+								else
+								{
+									P4SimpleSccConfigDirty = true;  // we need to save these settings
+								}
+
+								break;
+							}
+
+							var parentDir = Directory.GetParent(currentPath);
+							if (parentDir == null)
+							{
+								break;
+							}
+							currentPath = parentDir.FullName;
+						}
+					}
+				}
+			}
+		}
 
 
         #region Source Control Command Enabling
@@ -872,6 +938,8 @@ Not ready for release yet */
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
+			GetSolutionFileName();
+
 			// see if we have a solution loaded or not
 			if (solutionDirectory == null || solutionDirectory == "")
 			{
@@ -895,7 +963,7 @@ Not ready for release yet */
 				Config.Set(Config.KEY.SolutionConfigDialogPosX, Dialog.PosX);
 				Config.Set(Config.KEY.SolutionConfigDialogPosY, Dialog.PosY);
 
-				P4SimpleSccConfigDirty = true;  // we need to write these to the solution .suo file
+				P4SimpleSccConfigDirty = true;  // we need to save these settings
 			}
 
 			if (result == System.Windows.Forms.DialogResult.OK)

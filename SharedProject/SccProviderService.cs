@@ -18,8 +18,6 @@ using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
-using Microsoft;
-using ClassLibrary;
 
 namespace P4SimpleScc
 {
@@ -223,13 +221,14 @@ namespace P4SimpleScc
 
 		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			return OnAfterOpenSolutionOrFolder();
 		}
 
 		public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel)
-				{
+		{
 			return OnQueryCloseSolutionOrFolder();
-			}
+		}
 
 		public int OnBeforeCloseSolution(object pUnkReserved)
 		{
@@ -251,6 +250,8 @@ namespace P4SimpleScc
 		#region IVsSolutionEvents7 interface functions
 		public void OnAfterOpenFolder(string folderPath)
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
 			var returnCode = OnAfterOpenSolutionOrFolder();
 			if (returnCode != VSConstants.S_OK)
 			{
@@ -512,49 +513,7 @@ namespace P4SimpleScc
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
 
-			if (!_sccProvider.bSolutionLoadedOutputDone && _sccProvider.GetSolutionFileName() != null && !String.IsNullOrEmpty(_sccProvider.solutionDirectory))
-			{
-				// We may have a P4CONFIG file (https://www.perforce.com/manuals/v23.1/cmdref/Content/CmdRef/P4CONFIG.html),
-				// in which case we want to default the solution config to automatic.
-				// Start with checking whether P4 is even configured to look for one.
-				string P4Config;
-				string P4Port;
-				string P4User;
-				string P4Client;
-				P4Command p4 = new P4Command();
-				p4.RunP4Set(_sccProvider.solutionDirectory, out P4Port, out P4User, out P4Client, out P4Config, out string verbose);
-				if (!string.IsNullOrEmpty(P4Config))
-				{
-					// The P4CONFIG environment variable is set, now go look for the file.
-					string currentPath = _sccProvider.solutionDirectory;
-
-					// Loop until we reach the root directory.
-					while (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath))
-					{
-						string filePath = Path.Combine(currentPath, P4Config);
-
-						if (File.Exists(filePath))
-						{
-							// P4CONFIG exists! Start out defaulting to automatic and set up P4 settings.
-							_sccProvider.SolutionConfigType = 1;
-							_sccProvider.SetP4SettingsForSolution(_sccProvider.solutionDirectory);
-							break;
-						}
-
-						var parentDir = Directory.GetParent(currentPath);
-						if (parentDir == null)
-						{
-							break;
-						}
-						currentPath = parentDir.FullName;
-					}
-				}
-
-				string message = String.Format("Loaded solution: {0}\n", _sccProvider.solutionFile);
-				SccProvider.P4SimpleSccOutput(message);
-
-				_sccProvider.bSolutionLoadedOutputDone = true;
-			}
+			_sccProvider.AfterOpenSolutionOrFolder();
 
 			return VSConstants.S_OK;
 		}
@@ -585,6 +544,9 @@ namespace P4SimpleScc
 			_sccProvider.solutionFile = "";
 
 			_sccProvider.bSolutionLoadedOutputDone = false;
+
+			_sccProvider.bReadUserOptionsCalled = false;
+			_sccProvider.bUserSettingsWasEmpty = false;
 
 			return VSConstants.S_OK;
 		}
