@@ -1,6 +1,6 @@
 ﻿
 //
-// Copyright 2022 - Jeffrey "botman" Broome
+// Copyright - Jeffrey "botman" Broome
 //
 
 using System;
@@ -92,22 +92,29 @@ namespace P4SimpleScc
 
 		public bool bSolutionLoadedOutputDone = false;
 
+		public bool bIsWorkspace = false;  // 'true' if "Open Folder" was used to open this project, 'false' if project was opened using a Solution file
+		public string WindowActivatedFilename = "";
+
 		public bool bReadUserOptionsCalled = false;  // this allows us to determine if user settings were attempted to be loaded
 		public bool bUserSettingsWasEmpty = false;  // previously, if P4SimpleScc was disabled, settings were removed from the .sou file in the .vs folder, this bool will be 'true' if the settings are missing
 
 		// P4SimpleScc solution configuration settings...
-		public int SolutionConfigType = 0;  // 0 = disabled, 1 = automatic, 2 = manual settings
+		public static int SolutionConfigType = 0;  // 0 = disabled, 1 = automatic, 2 = manual settings
 		public bool bCheckOutOnEdit = true;
 		public bool bPromptForCheckout = false;
 		public string P4Port = "";
 		public string P4User = "";
 		public string P4Client = "";
-		public bool bVerboseOutput = false;
+		public static bool bVerboseOutput = false;
 		public static bool bOutputEnabled = false;
 
 		public static bool P4SimpleSccConfigDirty = false;  // has the solution configuration for this solution been modified (and needs to be saved)?
 
 		public static bool bIsNotAllWrite = true;
+
+		private static object OpututQueueLock = new object();
+		private static List<string> OutputQueueList = new List<string>();
+		private System.Windows.Threading.DispatcherTimer OutputQueueTimer = null;
 
 		private static char[] InvalidChars;
 		private	List<string> FilenameList;
@@ -120,6 +127,7 @@ namespace P4SimpleScc
 		/// </summary>
 		public const int icmdSolutionConfiguration = 0x0100;
 		public const int icmdCheckOutFile = 0x101;
+        public const int icmdWorkspaceCheckOutFile = 0x0501;
 
 
 		/// <summary>
@@ -163,6 +171,9 @@ namespace P4SimpleScc
 			// Proffer the source control service implemented by the provider
 			sccService = new SccProviderService(this);
 			((IServiceContainer)this).AddService(typeof(SccProviderService), sccService, true);
+
+			var dte = this.GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+			dte.Events.WindowEvents.WindowActivated += WindowEventsOnWindowActivated;
 
 			// Add our command handlers for menu (commands must exist in the .vsct file)
 			MsVsShell.OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as MsVsShell.OleMenuCommandService;
@@ -215,7 +226,7 @@ namespace P4SimpleScc
 	                if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
 					{
 						string message = String.Format("Loaded solution: {0}\n", solutionFile);
-						SccProvider.P4SimpleSccOutput(message);
+						SccProvider.P4SimpleSccQueueOutput(message);
 
 						bSolutionLoadedOutputDone = true;
 					}
@@ -223,6 +234,11 @@ namespace P4SimpleScc
 					AfterOpenSolutionOrFolder();
 				}
 			}
+
+			OutputQueueTimer = new System.Windows.Threading.DispatcherTimer();
+			OutputQueueTimer.Interval = TimeSpan.FromMilliseconds(100);
+			OutputQueueTimer.Tick += OnTimerEvent;
+			OutputQueueTimer.Start();
 		}
 
 		/// <summary>
@@ -445,7 +461,7 @@ namespace P4SimpleScc
                 if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
                 {
                     string message = String.Format("Loaded solution: {0}\n", solutionFile);
-                    SccProvider.P4SimpleSccOutput(message);
+                    SccProvider.P4SimpleSccQueueOutput(message);
 
                     bSolutionLoadedOutputDone = true;
                 }
@@ -569,7 +585,7 @@ namespace P4SimpleScc
                 return VSConstants.E_INVALIDARG;
 
             // Filter out commands that are not defined by this package
-            if (guidCmdGroup != GuidList.guidSccProviderCmdSet)
+            if ((guidCmdGroup != GuidList.guidSccProviderCmdSet) && (guidCmdGroup != GuidList.GuidOpenFolderExtensibilityPackageCmdSet))
             {
                 return (int)(Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED); ;
             }
@@ -605,6 +621,10 @@ namespace P4SimpleScc
 					}
                     break;
 
+				case icmdWorkspaceCheckOutFile:
+					cmdf |= OLECMDF.OLECMDF_SUPPORTED;
+					break;
+
                 default:
                     return (int)(Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED);
 			}
@@ -623,74 +643,73 @@ namespace P4SimpleScc
                 return OLECMDF.OLECMDF_INVISIBLE;
             }
 
-            IList<VSITEMSELECTION> sel = GetSelectedNodes();
-
 			bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
-
 			FilenameList = new List<String>();
 
-			try
+			if (bIsWorkspace)  // is a Workspace open (i.e. "Open Folder"), if not, we assume we opened a Solution
 			{
-				foreach (VSITEMSELECTION item in sel)
+				if (WindowActivatedFilename != "")
 				{
-					string Filename = "";
+					FilenameList.Add(WindowActivatedFilename);
 
-					if ((item.pHier == null) || ((item.pHier as IVsSolution) != null))
-					{
-						Filename = GetSolutionFileName();
-					}
-					else if ((IVsProject)item.pHier != null)
-					{
-						IVsProject Project = (IVsProject)item.pHier;
+					bool bIsCheckedOut = IsCheckedOut(WindowActivatedFilename, out string stderr);
 
-						Project.GetMkDocument(item.itemid, out Filename);
+					bool bShouldIgnoreStatus = false;
+					if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+					{
+						bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
 					}
 
-					if (Filename != "")
-					{
-						FilenameList.Add(Filename);
-
-						bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
-
-						bool bShouldIgnoreStatus = false;
-						if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
-						{
-							bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
-						}
-
-						if (!bIsCheckedOut && !bShouldIgnoreStatus)
-						{
-							bAllFilesAreCheckedOut = false;
-						}
-					}
-				}
-
-/* Not ready for release yet
-				foreach (VSITEMSELECTION item in sel)
-				{
-					if ((item.pHier == null) || (item.pHier as IVsSolution) != null)
-					{
-						Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "The solution was selected"));
-					}
-					else
-					{
-						GetFilesInSolutionRecursive(item.pHier, VSConstants.VSITEMID_ROOT, ref FilenameList);
-					}
-				}
-
-				foreach (String Filename in FilenameList)
-				{
-					if (Filename != "" && !IsCheckedOut(Filename))
+					if (!bIsCheckedOut && !bShouldIgnoreStatus)
 					{
 						bAllFilesAreCheckedOut = false;
 					}
 				}
-Not ready for release yet */
-
 			}
-			catch (Exception ex)
+			else
 			{
-				Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: ex.message = {0}", ex.Message));
+				IList<VSITEMSELECTION> sel = GetSelectedNodes();
+
+				foreach (VSITEMSELECTION item in sel)
+				{
+					try
+					{
+						string Filename = "";
+
+						if ((item.pHier == null) || ((item.pHier as IVsSolution) != null))
+						{
+							Filename = GetSolutionFileName();
+						}
+						else if ((IVsProject)item.pHier != null)
+						{
+							IVsProject Project = (IVsProject)item.pHier;
+
+							Project.GetMkDocument(item.itemid, out Filename);
+						}
+
+						if (Filename != "")
+						{
+							FilenameList.Add(Filename);
+
+							bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+							bool bShouldIgnoreStatus = false;
+							if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+							{
+								bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+							}
+
+							if (!bIsCheckedOut && !bShouldIgnoreStatus)
+							{
+								bAllFilesAreCheckedOut = false;
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: ex.message = {0}", ex.Message));
+					}
+				}
 			}
 
 			if (bAllFilesAreCheckedOut)
@@ -792,142 +811,6 @@ Not ready for release yet */
 
 			return selectedNodes;
 		}
-
-/* Not ready for release yet
-		private void GetFilesInSolutionRecursive(IVsHierarchy hierarchy, uint itemId, ref List<string> FilenameList)
-		{
-			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
-
-			try
-			{
-				// NOTE: If itemId == VSConstants.VSITEMID_ROOT then this hierarchy is a solution, project, or folder in the Solution Explorer
-
-				if (hierarchy == null)
-				{
-					return;
-				}
-
-				IVsProject Project = (IVsProject)hierarchy;
-
-				object ChildObject = null;
-
-				// Get the first visible child node
-				if (hierarchy.GetProperty(itemId, (int)__VSHPROPID.VSHPROPID_FirstVisibleChild, out ChildObject) == VSConstants.S_OK)
-				{
-					while (ChildObject != null)
-					{
-						if ((ChildObject is int) && ((uint)(int)ChildObject == VSConstants.VSITEMID_NIL))
-						{
-							break;
-						}
-
-						uint visibleChildNodeId = Convert.ToUInt32(ChildObject);
-
-						Guid nestedHierarchyGuid = typeof(IVsHierarchy).GUID;
-						IntPtr nestedHiearchyValue = IntPtr.Zero;
-						uint nestedItemIdValue = 0;
-
-						// see if the child node has a nested hierarchy (i.e. is it a project?, is it a folder?, etc.)...
-						if ((hierarchy.GetNestedHierarchy(visibleChildNodeId, ref nestedHierarchyGuid, out nestedHiearchyValue, out nestedItemIdValue) == VSConstants.S_OK) &&
-							(nestedHiearchyValue != IntPtr.Zero && nestedItemIdValue == VSConstants.VSITEMID_ROOT))
-						{
-							// Get the new hierarchy
-							IVsHierarchy nestedHierarchy = System.Runtime.InteropServices.Marshal.GetObjectForIUnknown(nestedHiearchyValue) as IVsHierarchy;
-							System.Runtime.InteropServices.Marshal.Release(nestedHiearchyValue);
-
-							if (nestedHierarchy != null)
-							{
-								IVsProject NewProject = null;
-								string NewProjectName = "";
-
-								NewProject = (IVsProject)nestedHierarchy;
-								if (NewProject != null)
-								{
-									object nameObject = null;
-
-									if ((nestedHierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_Name, out nameObject) == VSConstants.S_OK) && (nameObject != null))
-									{
-										NewProjectName = (string)nameObject;
-
-										if (NewProjectName.Contains("External"))
-										{
-											Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "External!"));
-										}
-									}
-
-									// recurse into the new nested hierarchy to handle children...
-									GetFilesInSolutionRecursive(nestedHierarchy, VSConstants.VSITEMID_ROOT, ref FilenameList);
-								}
-							}
-						}
-						else
-						{
-							string projectFilename = "";
-
-							try
-							{
-								if (Project.GetMkDocument(visibleChildNodeId, out projectFilename) == VSConstants.S_OK)
-								{
-									if ((projectFilename != null) && (projectFilename.Length > 0) &&
-										(!projectFilename.EndsWith("\\")) &&  // some invalid "filenames" will end with '\\'
-										(projectFilename.IndexOfAny(InvalidChars) == -1) &&
-										(projectFilename.IndexOf(":", StringComparison.OrdinalIgnoreCase) == 1))  // make sure filename is of the form: drive letter followed by colon
-									{
-										if (!FilenameList.Contains(projectFilename))
-										{
-											FilenameList.Add(projectFilename);
-										}
-									}
-
-								}
-							}
-							catch (Exception ex)
-							{
-								Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: {0}", ex.Message));
-							}
-
-							object NodeChildObject = null;
-
-							// see if this regular node has children...
-							if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_FirstVisibleChild, out NodeChildObject) == VSConstants.S_OK)
-							{
-								if (NodeChildObject != null)
-								{
-									if ((NodeChildObject is int) && ((uint)(int)NodeChildObject != VSConstants.VSITEMID_NIL))
-									{
-										string captionName = "";
-										object captionNameObject = null;
-										if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_Caption, out captionNameObject) == VSConstants.S_OK)
-										{
-											captionName = (string)captionNameObject;
-										}
-
-										if (captionName != "External Dependencies")
-										{
-											// recurse into the regular node to handle children...
-											GetFilesInSolutionRecursive(hierarchy, visibleChildNodeId, ref FilenameList);
-										}
-									}
-								}
-							}
-						}
-
-						ChildObject = null;
-
-						// Get the next visible sibling node
-						if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_NextVisibleSibling, out ChildObject) != VSConstants.S_OK)
-						{
-							break;
-						}
-					}
-				}
-			}
-			catch (Exception ex)
-			{
-				Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: {0}", ex.Message));
-			}
-		}
-Not ready for release yet */
 
 		#endregion // Source Control Command Enabling
 
@@ -1054,7 +937,7 @@ Not ready for release yet */
 						{
 							verbose += "\n";
 						}
-						P4SimpleSccOutput(verbose);
+						P4SimpleSccQueueOutput(verbose);
 					}
 				}
 				else if (SolutionConfigType == 2)  // if manual settings
@@ -1082,7 +965,7 @@ Not ready for release yet */
 
 				if (message != "")
 				{
-					P4SimpleSccOutput(message);
+					P4SimpleSccQueueOutput(message);
 				}
 
 				// set the P4Command environment variables for future "p4" commands (like "p4 edit", etc.)
@@ -1106,28 +989,26 @@ Not ready for release yet */
 					{
 						verbose += "\n";
 					}
-					P4SimpleSccOutput(verbose);
+					P4SimpleSccQueueOutput(verbose);
 				}
 
 				if (stderr != null && stderr.Length > 0)
 				{
-					P4SimpleSccOutput("Connection to server failed!\n");
-					P4SimpleSccOutput(stderr);
+					P4SimpleSccQueueOutput("Connection to server failed!\n");
+					P4SimpleSccQueueOutput(stderr);
 
 					string message = "Connection to server failed.\n" + stderr;
 					MsVsShell.VsShellUtilities.ShowMessageBox(package, message, "P4SimpleScc Error", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
 				}
 				else
 				{
-					P4SimpleSccOutput("Connection to server successful.\n");
+					P4SimpleSccQueueOutput("Connection to server successful.\n");
 				}
 			}
 		}
 
-		public bool IsCheckedOut(string Filename, out string stderr)
+		public static bool IsCheckedOut(string Filename, out string stderr)
 		{
-			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
-
 			stderr = "";
 			bool status = false;
 
@@ -1153,17 +1034,15 @@ Not ready for release yet */
 					{
 						verbose += "\n";
 					}
-					P4SimpleSccOutput(verbose);
+					P4SimpleSccQueueOutput(verbose);
 				}
 			}
 
 			return status;
 		}
 
-		public bool CheckOutFile(string Filename)
+		public static bool CheckOutFile(string Filename)
 		{
-			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
-
 			if (SolutionConfigType != 0)  // not disabled?
 			{
 				if (File.Exists(Filename))  // if the file doesn't exist, then it can't be in source control (i.e. brand new file)
@@ -1178,7 +1057,7 @@ Not ready for release yet */
 						{
 							verbose += "\n";
 						}
-						P4SimpleSccOutput(verbose);
+						P4SimpleSccQueueOutput(verbose);
 					}
 
 					// if file already checked out, or file not in client's root (outside workspace), or file is not in source control (brand new file, not yet added to source control)
@@ -1190,8 +1069,8 @@ Not ready for release yet */
 					if (stderr != null && stderr.Length > 0)
 					{
 						string message = String.Format("Check out of '{0}' failed.\n", Filename);
-						P4SimpleSccOutput(message);
-						P4SimpleSccOutput(stderr);
+						P4SimpleSccQueueOutput(message);
+						P4SimpleSccQueueOutput(stderr);
 
 						string dialog_message = message + stderr;
 						MsVsShell.VsShellUtilities.ShowMessageBox(package, dialog_message, "P4SimpleScc Error", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
@@ -1201,7 +1080,7 @@ Not ready for release yet */
 					else
 					{
 						string message = String.Format("Check out of '{0}' successful.\n", Filename);
-						P4SimpleSccOutput(message);
+						P4SimpleSccQueueOutput(message);
 
 						return true;
 					}
@@ -1227,7 +1106,7 @@ Not ready for release yet */
 				output += "\n";
 			}
 
-			P4SimpleSccOutput(output, true);
+			P4SimpleSccQueueOutput(output, true);
 		}
 
 		/// <summary>
@@ -1271,11 +1150,24 @@ Not ready for release yet */
 		/// This function will output a line of text to the P4SimpleScc Output window (for logging purposes for P4 commands)
 		/// </summary>
 		/// <param name="text">text string to be output to the P4SimpleScc Output window (user must include \n character for newline at the end of the text string)
-		public static void P4SimpleSccOutput(string text, bool bForceOutput = false)  // user must include \n newline characters
+		public static void P4SimpleSccQueueOutput(string text, bool bForceOutput = false)  // user must include \n newline characters
+		{
+			if (bOutputEnabled || bForceOutput)
+			{
+				string OutputMessage = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss - ") + text;
+
+				lock (OpututQueueLock)
+				{
+					OutputQueueList.Add(OutputMessage);
+				}
+			}
+		}
+
+		private void OnTimerEvent(object sender, EventArgs e)
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-			if (bOutputEnabled || bForceOutput)
+			lock (OpututQueueLock)
 			{
 				IVsOutputWindow output = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
 
@@ -1286,12 +1178,27 @@ Not ready for release yet */
 
 					if (OutputPane != null)
 					{
-						OutputPane.OutputString(DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss - "));
-						OutputPane.OutputString(text);
+						foreach( string message in OutputQueueList)
+						{
+							OutputPane.OutputString(message);
+						}
 					}
 				}
+
+				OutputQueueList.Clear();
 			}
 		}
 
+		private void WindowEventsOnWindowActivated(EnvDTE.Window gotFocus, EnvDTE.Window lostFocus)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (gotFocus.Kind != "Document")
+			{
+				return; //It's not a document (e.g. it's a tool window)
+			}
+
+			WindowActivatedFilename = gotFocus.Document.FullName;
+		}
 	}
 }

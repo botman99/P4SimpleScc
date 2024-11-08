@@ -110,7 +110,7 @@ namespace P4SimpleScc
 			else
 			{
 				// Although the parameter is an int, it's in reality a BOOL value, so let's return 0/1 values
-				pfResult = (_sccProvider.SolutionConfigType != 0) ? 1 : 0;
+				pfResult = (SccProvider.SolutionConfigType != 0) ? 1 : 0;
 			}
 	
 			return VSConstants.S_OK;
@@ -222,12 +222,16 @@ namespace P4SimpleScc
 		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
-			return OnAfterOpenSolutionOrFolder();
+			_sccProvider.AfterOpenSolutionOrFolder();
+
+			_sccProvider.bIsWorkspace = false;  // we opened a solution, not a folder
+
+			return VSConstants.S_OK;
 		}
 
 		public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel)
 		{
-			return OnQueryCloseSolutionOrFolder();
+			return VSConstants.S_OK;
 		}
 
 		public int OnBeforeCloseSolution(object pUnkReserved)
@@ -238,7 +242,7 @@ namespace P4SimpleScc
 
 		public int OnAfterCloseSolution(object pUnkReserved)
 		{
-			return OnAfterCloseSolutionOrFolder();
+			return VSConstants.S_OK;
 		}
 
 		#endregion  // IVsSolutionEvents
@@ -251,40 +255,23 @@ namespace P4SimpleScc
 		public void OnAfterOpenFolder(string folderPath)
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
+			_sccProvider.AfterOpenSolutionOrFolder();
 
-			var returnCode = OnAfterOpenSolutionOrFolder();
-			if (returnCode != VSConstants.S_OK)
-			{
-				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
-			}
+			_sccProvider.bIsWorkspace = true;  // we opened a folder, not a solution
 		}
 
 		public void OnQueryCloseFolder(string folderPath, ref int pfCancel)
 		{
-			var returnCode = OnQueryCloseSolutionOrFolder();
-			if (returnCode != VSConstants.S_OK)
-			{
-				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
-			}
 		}
 
 		public void OnBeforeCloseFolder(string folderPath)
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
-			var returnCode = OnBeforeCloseSolutionOrFolder();
-			if (returnCode != VSConstants.S_OK)
-			{
-				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
-			}
+			OnBeforeCloseSolutionOrFolder();
 		}
 
 		public void OnAfterCloseFolder(string folderPath)
 		{
-			var returnCode = OnAfterCloseSolutionOrFolder();
-			if (returnCode != VSConstants.S_OK)
-			{
-				throw new NotImplementedException("Inner call returned unexpected code " + returnCode);
-			}
 		}
 
 		[Obsolete("This API is no longer supported by Visual Studio.")]
@@ -316,7 +303,7 @@ namespace P4SimpleScc
 				return VSConstants.S_OK;
 			}
 
-			if (_sccProvider.SolutionConfigType != 0)  // if not disabled...
+			if (SccProvider.SolutionConfigType != 0)  // if not disabled...
 			{
 				if (_sccProvider.bCheckOutOnEdit)
 				{
@@ -337,7 +324,7 @@ namespace P4SimpleScc
 							else
 							{
 								bool bIsCheckoutOkay = true;
-								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
+								bool bIsCheckedOut = SccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
 
 								bool bShouldIgnoreStatus = false;
 								if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
@@ -361,7 +348,7 @@ namespace P4SimpleScc
 
 								if (bIsCheckoutOkay)
 								{
-									if (bIsCheckedOut || bShouldIgnoreStatus || _sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file is already checked out or if we were able to check out the file, then edit is okay
+									if (bIsCheckedOut || bShouldIgnoreStatus || SccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file is already checked out or if we were able to check out the file, then edit is okay
 									{
 										fEditVerdict = (uint)tagVSQueryEditResult.QER_EditOK;
 										fMoreInfo = (uint)tagVSQueryEditResultFlags.QER_MaybeCheckedout;
@@ -409,7 +396,7 @@ namespace P4SimpleScc
 				rgfQuerySave = rgfQuerySave | (uint)tagVSQuerySaveFlags.QSF_SilentMode;
 			}
 
-			if (_sccProvider.SolutionConfigType != 0)  // if not disabled...
+			if (SccProvider.SolutionConfigType != 0)  // if not disabled...
 			{
 				if (!_sccProvider.bCheckOutOnEdit)
 				{
@@ -423,7 +410,7 @@ namespace P4SimpleScc
 							if (fileExists)
 							{
 								bool bIsCheckoutOkay = true;
-								bool bIsCheckedOut = _sccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
+								bool bIsCheckedOut = SccProvider.IsCheckedOut(rgpszMkDocuments[iFile], out string stderr);
 
 								bool bShouldIgnoreStatus = false;
 								if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
@@ -443,7 +430,7 @@ namespace P4SimpleScc
 									}
 								}
 
-								if (bIsCheckoutOkay && !bIsCheckedOut && !bShouldIgnoreStatus && !_sccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file exists and we couldn't check it out, then it's not okay to save the file
+								if (bIsCheckoutOkay && !bIsCheckedOut && !bShouldIgnoreStatus && !SccProvider.CheckOutFile(rgpszMkDocuments[iFile]))  // if file exists and we couldn't check it out, then it's not okay to save the file
 								{
 									pdwQSResult = (uint)tagVSQuerySaveResult.QSR_ForceSaveAs;  // force a "Save As" dialog to save the file
 								}
@@ -509,15 +496,6 @@ namespace P4SimpleScc
 
 		#endregion  // IVsQueryEditQuerySave2
 
-		private int OnAfterOpenSolutionOrFolder()
-		{
-			ThreadHelper.ThrowIfNotOnUIThread();
-
-			_sccProvider.AfterOpenSolutionOrFolder();
-
-			return VSConstants.S_OK;
-		}
-
 		private int OnBeforeCloseSolutionOrFolder()
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
@@ -527,12 +505,12 @@ namespace P4SimpleScc
 				if (_sccProvider.solutionDirectory != null && _sccProvider.solutionDirectory.Length > 0)
 				{
 					string message = String.Format("Unloading solution: {0}\n", _sccProvider.solutionFile);
-					SccProvider.P4SimpleSccOutput(message);
+					SccProvider.P4SimpleSccQueueOutput(message);
 				}
 			}
 
 			// set all configuration settings back to uninitialized
-			_sccProvider.SolutionConfigType = 0;
+			SccProvider.SolutionConfigType = 0;
 			_sccProvider.bCheckOutOnEdit = true;
 			_sccProvider.bPromptForCheckout = false;
 
@@ -545,19 +523,12 @@ namespace P4SimpleScc
 
 			_sccProvider.bSolutionLoadedOutputDone = false;
 
+			_sccProvider.bIsWorkspace = false;
+			_sccProvider.WindowActivatedFilename = "";
+
 			_sccProvider.bReadUserOptionsCalled = false;
 			_sccProvider.bUserSettingsWasEmpty = false;
 
-			return VSConstants.S_OK;
-		}
-
-		private int OnAfterCloseSolutionOrFolder()
-		{
-			return VSConstants.S_OK;
-		}
-
-		private int OnQueryCloseSolutionOrFolder()
-		{
 			return VSConstants.S_OK;
 		}
 
