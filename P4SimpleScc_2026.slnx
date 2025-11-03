@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/ReadMe/">
+    <File Path="ReadMe/ReadMe.txt" />
+  </Folder>
+  <Folder Name="/SharedFiles/">
+    <File Path="SharedFiles/P4SimpleSccPackage.vsct" />
+  </Folder>
+  <Folder Name="/SharedFiles/Resources/">
+    <File Path="SharedFiles/Resources/Command.png" />
+  </Folder>
+  <Project Path="ClassLibrary/ClassLibrary.csproj" Id="147cb2fb-a361-49ea-a025-5e1a37aa12ef" />
+  <Project Path="P4SimpleScc_2026/P4SimpleScc_2026.csproj" Id="4a143849-8a8f-49d4-bf49-4be716323718">
+  </Project>
+  <Project Path="SharedProject/SharedProject.shproj" Id="64cd1d5b-0e68-4a05-9535-bf12013dd743" />
+</Solution>

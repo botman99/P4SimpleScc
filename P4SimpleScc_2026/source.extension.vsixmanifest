@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="P4SimpleScc_2022.b8cf4ec2-3cff-471c-bb25-d62b1732ac48" Version="3.0" Language="en-US" Publisher="Jeffrey Broome" />
+        <Identity Id="P4SimpleScc_2026.6cc0b345-65b9-48b2-bb45-7a9adde7d9fb" Version="3.0" Language="en-US" Publisher="Jeffrey Broome" />
         <DisplayName>P4SimpleScc</DisplayName>
         <Description xml:space="preserve">P4SimpleScc source code control provider</Description>
         <License>LICENSE.txt</License>
@@ -10,7 +10,7 @@
         <Tags>Perforce; Scc; source; control</Tags>
     </Metadata>
     <Installation>
-        <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0, 18.0)">
+        <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[18.0, )">
             <ProductArchitecture>amd64</ProductArchitecture>
         </InstallationTarget>
     </Installation>
@@ -18,7 +18,7 @@
         <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.5,)" />
     </Dependencies>
     <Prerequisites>
-        <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,18.0)" DisplayName="Visual Studio core editor" />
+        <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[18.0, )" DisplayName="Visual Studio core editor" />
     </Prerequisites>
     <Assets>
         <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />

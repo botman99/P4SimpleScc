@@ -524,7 +524,6 @@ namespace P4SimpleScc
 			_sccProvider.bSolutionLoadedOutputDone = false;
 
 			_sccProvider.bIsWorkspace = false;
-			_sccProvider.WindowActivatedFilename = "";
 
 			_sccProvider.bReadUserOptionsCalled = false;
 			_sccProvider.bUserSettingsWasEmpty = false;

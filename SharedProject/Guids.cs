@@ -14,9 +14,10 @@ namespace P4SimpleScc
 	public static class GuidList
 	{
 		// Now define the list of guids as public static members.
-   
+		public const string SccProviderGuidString = "{B205A1B6-0000-4A1C-8680-97FD2219C692}";
+
 		// Unique ID of the source control provider; this is also used as the command UI context to show/hide the pacakge UI
-		public static readonly Guid guidSccProvider = new Guid("{B205A1B6-0000-4A1C-8680-97FD2219C692}");
+		public static readonly Guid guidSccProvider = new Guid(SccProviderGuidString);
 		// The guid of the source control provider service (implementing IVsSccProvider interface)
 		public static readonly Guid guidSccProviderService = new Guid("{B205A1B6-1000-4A1C-8680-97FD2219C692}");
 		// The guid of the source control provider package (implementing IVsPackage interface)

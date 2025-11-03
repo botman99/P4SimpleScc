@@ -16,10 +16,12 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Settings;
 using Microsoft.VisualStudio.Shell.Settings;
 using PackageAutoLoadFlags = Microsoft.VisualStudio.AsyncPackageHelpers.PackageAutoLoadFlags;
+using EnvDTE;
 
 using MsVsShell = Microsoft.VisualStudio.Shell;
 
 using ClassLibrary;
+using Microsoft.VisualStudio.Shell;
 
 namespace P4SimpleScc
 {
@@ -49,13 +51,15 @@ namespace P4SimpleScc
 	// Register the source control provider's service (implementing IVsScciProvider interface)
 	[MsVsShell.ProvideService(typeof(SccProviderService), ServiceName = "P4SimpleScc")]
 	// Register the source control provider to be visible in Tools/Options/SourceControl/Plugin dropdown selector
-	[@ProvideSourceControlProvider("P4SimpleScc", "#100")]
+	[@ProvideSourceControlProvider("P4SimpleScc", GuidList.SccProviderGuidString, typeof(SccProvider), typeof(SccProviderService))]
 
 	// Pre-load the package when the command UI context is asserted (the provider will be automatically loaded after restarting the shell if it was active last time the shell was shutdown)
 	[Microsoft.VisualStudio.AsyncPackageHelpers.ProvideAutoLoad("B205A1B6-0000-4A1C-8680-97FD2219C692",PackageAutoLoadFlags.BackgroundLoad)]
 	[Microsoft.VisualStudio.AsyncPackageHelpers.AsyncPackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+#if (!P4SIMPLESCC_VS2026)
 	[Microsoft.VisualStudio.AsyncPackageHelpers.ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
 	[Microsoft.VisualStudio.AsyncPackageHelpers.ProvideAutoLoad(VSConstants.UICONTEXT.SolutionOpening_string, PackageAutoLoadFlags.BackgroundLoad)]
+#endif
 
 	// Register the key used for persisting solution properties, so the IDE will know to load the source control package when opening a controlled solution containing properties written by this package
 	[ProvideSolutionProps(_strSolutionPersistanceKey)]
@@ -93,7 +97,6 @@ namespace P4SimpleScc
 		public bool bSolutionLoadedOutputDone = false;
 
 		public bool bIsWorkspace = false;  // 'true' if "Open Folder" was used to open this project, 'false' if project was opened using a Solution file
-		public string WindowActivatedFilename = "";
 
 		public bool bReadUserOptionsCalled = false;  // this allows us to determine if user settings were attempted to be loaded
 		public bool bUserSettingsWasEmpty = false;  // previously, if P4SimpleScc was disabled, settings were removed from the .sou file in the .vs folder, this bool will be 'true' if the settings are missing
@@ -172,9 +175,6 @@ namespace P4SimpleScc
 			sccService = new SccProviderService(this);
 			((IServiceContainer)this).AddService(typeof(SccProviderService), sccService, true);
 
-			var dte = this.GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
-			dte.Events.WindowEvents.WindowActivated += WindowEventsOnWindowActivated;
-
 			// Add our command handlers for menu (commands must exist in the .vsct file)
 			MsVsShell.OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as MsVsShell.OleMenuCommandService;
 			if (mcs != null)
@@ -212,8 +212,22 @@ namespace P4SimpleScc
 				}
 			}
 
-			if (GetSolutionFileName() != null)  // this is the path that will be taken when the solution is opened by double clicking or being specified as a commandline argument when launching Visual Studio
+			string solutionFile = GetSolutionFileName();
+			if ( solutionFile != null)  // this is the path that will be taken when the solution is opened by double clicking or being specified as a commandline argument when launching Visual Studio
 			{
+				// this code can be hit after the solution/workspace is open due to the slowness of loading this provider (especially in Debug builds)
+				// double check if the "solution" that was loaded is a solution file or a folder
+
+				FileAttributes attribute = File.GetAttributes(solutionFile);
+				if ((attribute & FileAttributes.Directory) == FileAttributes.Directory)
+				{
+					bIsWorkspace = true;
+				}
+				else
+				{
+					bIsWorkspace = false;
+				}
+
 				if (solutionDirectory != null && solutionDirectory.Length > 0)  // was solution already opened by the time we were loaded?
 				{
 					IVsSolutionPersistence solPersistence = (IVsSolutionPersistence)GetService(typeof(IVsSolutionPersistence));
@@ -249,7 +263,10 @@ namespace P4SimpleScc
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-			sccService.Dispose();
+			if (sccService != null)
+			{
+				sccService.Dispose();
+			}
 
 			base.Dispose(disposing);
 		}
@@ -648,11 +665,19 @@ namespace P4SimpleScc
 
 			if (bIsWorkspace)  // is a Workspace open (i.e. "Open Folder"), if not, we assume we opened a Solution
 			{
-				if (WindowActivatedFilename != "")
-				{
-					FilenameList.Add(WindowActivatedFilename);
+				string OpenedDocument = "";
 
-					bool bIsCheckedOut = IsCheckedOut(WindowActivatedFilename, out string stderr);
+				DTE dte = GetService(typeof(SDTE)) as DTE;
+				if (dte != null)
+				{
+					OpenedDocument = dte.ActiveDocument.FullName;
+				}
+
+				if (OpenedDocument != "")
+				{
+					FilenameList.Add(OpenedDocument);
+
+					bool bIsCheckedOut = IsCheckedOut(OpenedDocument, out string stderr);
 
 					bool bShouldIgnoreStatus = false;
 					if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
@@ -1180,25 +1205,13 @@ namespace P4SimpleScc
 					{
 						foreach( string message in OutputQueueList)
 						{
-							OutputPane.OutputString(message);
+							OutputPane.OutputStringThreadSafe(message);
 						}
 					}
 				}
 
 				OutputQueueList.Clear();
 			}
-		}
-
-		private void WindowEventsOnWindowActivated(EnvDTE.Window gotFocus, EnvDTE.Window lostFocus)
-		{
-			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
-
-			if (gotFocus.Kind != "Document")
-			{
-				return; //It's not a document (e.g. it's a tool window)
-			}
-
-			WindowActivatedFilename = gotFocus.Document.FullName;
 		}
 	}
 }
