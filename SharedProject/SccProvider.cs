@@ -87,6 +87,8 @@ namespace P4SimpleScc
 		private const string _strSolutionBindingsProperty = "SolutionBindings";
 
 		private static MsVsShell.Package package;
+		public static System.IServiceProvider serviceProvider = null;
+        private IOleCommandTarget pkgCommandTarget = null;
 
 		public static Guid OutputPaneGuid = Guid.Empty;
 
@@ -120,16 +122,18 @@ namespace P4SimpleScc
 		private System.Windows.Threading.DispatcherTimer OutputQueueTimer = null;
 
 		private static char[] InvalidChars;
-		private	List<string> FilenameList;
+		private	List<string> FilenameList = new List<string>();
 
 		private CommandID menuCommandId;
 		private CommandID menuCheckOutFileCommandId;
+		private CommandID menuCheckOutDocumentFileCommandId;
 
 		/// <summary>
 		/// Command ID.
 		/// </summary>
 		public const int icmdSolutionConfiguration = 0x0100;
 		public const int icmdCheckOutFile = 0x101;
+		public const int icmdCheckOutDocumentFile = 0x102;
         public const int icmdWorkspaceCheckOutFile = 0x0501;
 
 
@@ -166,6 +170,8 @@ namespace P4SimpleScc
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
 			package = this;
+			serviceProvider = package as System.IServiceProvider;
+            pkgCommandTarget = GetService(typeof(IOleCommandTarget)) as IOleCommandTarget;
 
 			base.Initialize();
 
@@ -187,6 +193,10 @@ namespace P4SimpleScc
 				menuCheckOutFileCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdCheckOutFile);
 				MenuCommand menuCheckOutFileCmd = new MenuCommand(new EventHandler(Exec_menuCheckOutFileCommand), menuCheckOutFileCommandId);
 				mcs.AddCommand(menuCheckOutFileCmd);
+
+				menuCheckOutDocumentFileCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdCheckOutDocumentFile);
+				MenuCommand menuCheckOutDocumentFileCmd = new MenuCommand(new EventHandler(Exec_menuCheckOutFileCommand), menuCheckOutDocumentFileCommandId);
+				mcs.AddCommand(menuCheckOutDocumentFileCmd);
 			}
 
 			bool bP4SimpleSccEnabled = false;
@@ -591,126 +601,99 @@ namespace P4SimpleScc
 
         #region Source Control Command Enabling
 
-		public int QueryStatus(ref Guid guidCmdGroup, uint cCmds, OLECMD[] prgCmds, System.IntPtr pCmdText)
+		public int QueryStatus(ref Guid pguidCmdGroup, uint cCmds, OLECMD[] prgCmds, System.IntPtr pCmdText)
 		{
+			// This code handles the right-click menu of files in the Solution Explorer (for solutions) and right-clicking open Documents for solutions and workspaces
+			// The code that handles right-click menu for Solution Explorer for Workspaces is handled in GetActionsAsync of ActionProviderFactory
+
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-            Debug.Assert(cCmds == 1, "Multiple commands");
-            Debug.Assert(prgCmds != null, "NULL argument");
-
-            if ((prgCmds == null))
-                return VSConstants.E_INVALIDARG;
-
-            // Filter out commands that are not defined by this package
-            if ((guidCmdGroup != GuidList.guidSccProviderCmdSet) && (guidCmdGroup != GuidList.GuidOpenFolderExtensibilityPackageCmdSet))
+            if ((pguidCmdGroup == GuidList.guidSccProviderCmdSet) || (pguidCmdGroup != GuidList.GuidOpenFolderExtensibilityPackageCmdSet))
             {
-                return (int)(Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED); ;
-            }
+	            // All source control commands needs to be hidden and disabled when the provider is not active
+	            if (!sccService.Active)
+				{
+	                prgCmds[0].cmdf = (int)OLECMDF.OLECMDF_INVISIBLE & (int)~(OLECMDF.OLECMDF_ENABLED);
+	                return VSConstants.S_OK;
+				}
 
-            OLECMDF cmdf = OLECMDF.OLECMDF_SUPPORTED;
-
-            // All source control commands needs to be hidden and disabled when the provider is not active
-            if (!sccService.Active)
-            {
-                cmdf = cmdf | OLECMDF.OLECMDF_INVISIBLE;
-                cmdf = cmdf & ~(OLECMDF.OLECMDF_ENABLED);
-
-                prgCmds[0].cmdf = (uint)cmdf;
-                return VSConstants.S_OK;
-            }
-
-            // Process our Commands
-            switch (prgCmds[0].cmdID)
-            {
-                case icmdSolutionConfiguration:
-                    cmdf |= OLECMDF.OLECMDF_ENABLED;
-                    break;
-
-                case icmdCheckOutFile:
+				if (prgCmds[0].cmdID == icmdSolutionConfiguration)
+				{
+	                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+		            return VSConstants.S_OK;
+				}
+				else if (prgCmds[0].cmdID == icmdCheckOutFile)
+				{
 					if (SolutionConfigType == 0)
 					{
-		                cmdf = cmdf | OLECMDF.OLECMDF_INVISIBLE;
-				        cmdf = cmdf & ~(OLECMDF.OLECMDF_ENABLED);
+		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+			            return VSConstants.S_OK;
+					}
+
+					FilenameList = new List<string>();
+					bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
+
+					EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2; 
+					if (dte2 != null)
+					{
+						EnvDTE.UIHierarchy uih = dte2.ToolWindows.SolutionExplorer;
+						System.Array selectedItems = (System.Array)uih.SelectedItems;
+
+						foreach (UIHierarchyItem selItem in selectedItems)
+						{
+							ProjectItem projItem = selItem.Object as ProjectItem;
+							if (projItem != null)
+							{
+								string Filename = projItem.Properties.Item("FullPath").Value.ToString();
+
+								if (Filename != "")
+								{
+									FilenameList.Add(Filename);
+
+									bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+									bool bShouldIgnoreStatus = false;
+									if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+									{
+										bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+									}
+
+									if (!bIsCheckedOut && !bShouldIgnoreStatus)
+									{
+										bAllFilesAreCheckedOut = false;
+									}
+								}
+							}
+						}
+					}
+
+					if (bAllFilesAreCheckedOut)
+					{
+		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
 					else
 					{
-	                    cmdf |= QueryStatus_icmdCheckOutFile();
+		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
-                    break;
 
-				case icmdWorkspaceCheckOutFile:
-					cmdf |= OLECMDF.OLECMDF_SUPPORTED;
-					break;
-
-                default:
-                    return (int)(Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED);
-			}
-
-            prgCmds[0].cmdf = (uint)cmdf;
-
-            return VSConstants.S_OK;
-		}
-
-        OLECMDF QueryStatus_icmdCheckOutFile()
-        {
-			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
-
-            if (GetSolutionFileName() == null)
-            {
-                return OLECMDF.OLECMDF_INVISIBLE;
-            }
-
-			bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
-			FilenameList = new List<String>();
-
-			if (bIsWorkspace)  // is a Workspace open (i.e. "Open Folder"), if not, we assume we opened a Solution
-			{
-				string OpenedDocument = "";
-
-				DTE dte = GetService(typeof(SDTE)) as DTE;
-				if (dte != null)
-				{
-					OpenedDocument = dte.ActiveDocument.FullName;
+		            return VSConstants.S_OK;
 				}
 
-				if (OpenedDocument != "")
+				else if (prgCmds[0].cmdID == icmdCheckOutDocumentFile)
 				{
-					FilenameList.Add(OpenedDocument);
-
-					bool bIsCheckedOut = IsCheckedOut(OpenedDocument, out string stderr);
-
-					bool bShouldIgnoreStatus = false;
-					if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+					if (SolutionConfigType == 0)
 					{
-						bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+			            return VSConstants.S_OK;
 					}
 
-					if (!bIsCheckedOut && !bShouldIgnoreStatus)
+					FilenameList = new List<string>();
+					bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
+
+					EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2; 
+					if (dte2 != null)
 					{
-						bAllFilesAreCheckedOut = false;
-					}
-				}
-			}
-			else
-			{
-				IList<VSITEMSELECTION> sel = GetSelectedNodes();
-
-				foreach (VSITEMSELECTION item in sel)
-				{
-					try
-					{
-						string Filename = "";
-
-						if ((item.pHier == null) || ((item.pHier as IVsSolution) != null))
-						{
-							Filename = GetSolutionFileName();
-						}
-						else if ((IVsProject)item.pHier != null)
-						{
-							IVsProject Project = (IVsProject)item.pHier;
-
-							Project.GetMkDocument(item.itemid, out Filename);
-						}
+						string Filename = dte2.ActiveDocument.FullName;
 
 						if (Filename != "")
 						{
@@ -730,111 +713,21 @@ namespace P4SimpleScc
 							}
 						}
 					}
-					catch (Exception ex)
+
+					if (bAllFilesAreCheckedOut)
 					{
-						Debug.WriteLine(string.Format(CultureInfo.CurrentUICulture, "Exception: ex.message = {0}", ex.Message));
+		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
+					else
+					{
+		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+					}
+
+		            return VSConstants.S_OK;
 				}
 			}
 
-			if (bAllFilesAreCheckedOut)
-			{
-				return OLECMDF.OLECMDF_SUPPORTED;
-			}
-
-			return OLECMDF.OLECMDF_ENABLED;
-        }
-
-        /// <summary>
-        /// Gets the list of directly selected VSITEMSELECTION objects
-		/// </summary>
-		/// <returns>A list of VSITEMSELECTION objects</returns>
-		private IList<VSITEMSELECTION> GetSelectedNodes()
-		{
-			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
-
-			// Retrieve shell interface in order to get current selection
-			IVsMonitorSelection monitorSelection = this.GetService(typeof(IVsMonitorSelection)) as IVsMonitorSelection;
-			Debug.Assert(monitorSelection != null, "Could not get the IVsMonitorSelection object from the services exposed by this project");
-			if (monitorSelection == null)
-			{
-				throw new InvalidOperationException();
-			}
-            
-			List<VSITEMSELECTION> selectedNodes = new List<VSITEMSELECTION>();
-			IntPtr hierarchyPtr = IntPtr.Zero;
-			IntPtr selectionContainer = IntPtr.Zero;
-			try
-			{
-				// Get the current project hierarchy, project item, and selection container for the current selection
-				// If the selection spans multiple hierachies, hierarchyPtr is Zero
-				uint itemid;
-				IVsMultiItemSelect multiItemSelect = null;
-				ErrorHandler.ThrowOnFailure(monitorSelection.GetCurrentSelection(out hierarchyPtr, out itemid, out multiItemSelect, out selectionContainer));
-
-                if (itemid != VSConstants.VSITEMID_SELECTION)
-                {
-				    // We only care if there are nodes selected in the tree
-                    if (itemid != VSConstants.VSITEMID_NIL)
-                    {
-                        if (hierarchyPtr == IntPtr.Zero)
-                        {
-                            // Solution is selected
-                            VSITEMSELECTION vsItemSelection;
-                            vsItemSelection.pHier = null;
-                            vsItemSelection.itemid = itemid;
-                            selectedNodes.Add(vsItemSelection);
-                        }
-                        else
-                        {
-                            IVsHierarchy hierarchy = (IVsHierarchy)Marshal.GetObjectForIUnknown(hierarchyPtr);
-                            // Single item selection
-                            VSITEMSELECTION vsItemSelection;
-                            vsItemSelection.pHier = hierarchy;
-                            vsItemSelection.itemid = itemid;
-                            selectedNodes.Add(vsItemSelection);
-                        }
-                    }
-                }
-                else
-                {
-                    if (multiItemSelect != null)
-                    {
-                        // This is a multiple item selection.
-
-                        //Get number of items selected and also determine if the items are located in more than one hierarchy
-                        uint numberOfSelectedItems;
-                        int isSingleHierarchyInt;
-                        ErrorHandler.ThrowOnFailure(multiItemSelect.GetSelectionInfo(out numberOfSelectedItems, out isSingleHierarchyInt));
-                        bool isSingleHierarchy = (isSingleHierarchyInt != 0);
-
-                        // Now loop all selected items and add them to the list 
-                        Debug.Assert(numberOfSelectedItems > 0, "Bad number of selected itemd");
-                        if (numberOfSelectedItems > 0)
-                        {
-                            VSITEMSELECTION[] vsItemSelections = new VSITEMSELECTION[numberOfSelectedItems];
-                            ErrorHandler.ThrowOnFailure(multiItemSelect.GetSelectedItems(0, numberOfSelectedItems, vsItemSelections));
-                            foreach (VSITEMSELECTION vsItemSelection in vsItemSelections)
-                            {
-                                selectedNodes.Add(vsItemSelection);
-                            }
-                        }
-                    }
-                }
-			}
-			finally
-			{
-				if (hierarchyPtr != IntPtr.Zero)
-				{
-					Marshal.Release(hierarchyPtr);
-				}
-				if (selectionContainer != IntPtr.Zero)
-				{
-					Marshal.Release(selectionContainer);
-				}
-			}
-
-			return selectedNodes;
+            return this.pkgCommandTarget.QueryStatus(ref pguidCmdGroup, cCmds, prgCmds, pCmdText);
 		}
 
 		#endregion // Source Control Command Enabling

@@ -1,1 +1,12 @@
 .p4ignore
+.p4config
+.vs
+ClassLibrary/bin/
+ClassLibrary/obj/
+P4SimpleScc_2019/bin/
+P4SimpleScc_2019/obj/
+P4SimpleScc_2022/bin/
+P4SimpleScc_2022/obj/
+P4SimpleScc_2026/bin/
+P4SimpleScc_2026/obj/
+

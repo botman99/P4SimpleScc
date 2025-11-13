@@ -46,6 +46,14 @@ namespace P4SimpleScc
 
             public Task<IReadOnlyList<IFileContextAction>> GetActionsAsync(string filePath, FileContext fileContext, CancellationToken cancellationToken)
             {
+				// if P4SimpleScc is active but disabled, show the "Check Out File" menu item as disabled
+				if (SccProvider.SolutionConfigType == 0)
+				{
+                    return Task.FromResult<IReadOnlyList<IFileContextAction>>(new IFileContextAction[]
+                    {
+                    });
+				}
+
 				bool bIsCheckedOut = SccProvider.IsCheckedOut(filePath, out string stderr);
 
                 if (!bIsCheckedOut)  // if the file is not already checked out, then add the menu item to check out the file

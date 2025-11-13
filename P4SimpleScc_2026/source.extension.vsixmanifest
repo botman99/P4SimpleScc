@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="P4SimpleScc_2026.6cc0b345-65b9-48b2-bb45-7a9adde7d9fb" Version="3.0" Language="en-US" Publisher="Jeffrey Broome" />
+        <Identity Id="P4SimpleScc_2026.6cc0b345-65b9-48b2-bb45-7a9adde7d9fb" Version="3.1" Language="en-US" Publisher="Jeffrey Broome" />
         <DisplayName>P4SimpleScc</DisplayName>
         <Description xml:space="preserve">P4SimpleScc source code control provider</Description>
         <License>LICENSE.txt</License>
