@@ -3,7 +3,7 @@
     <Metadata>
         <Identity Id="P4SimpleScc_2026.6cc0b345-65b9-48b2-bb45-7a9adde7d9fb" Version="3.1" Language="en-US" Publisher="Jeffrey Broome" />
         <DisplayName>P4SimpleScc</DisplayName>
-        <Description xml:space="preserve">P4SimpleScc source code control provider</Description>
+        <Description xml:space="preserve">P4SimpleScc source code control provider for VS2026</Description>
         <License>LICENSE.txt</License>
         <GettingStartedGuide>https://github.com/botman99/P4SimpleScc</GettingStartedGuide>
         <ReleaseNotes>https://github.com/botman99/P4SimpleScc/releases</ReleaseNotes>

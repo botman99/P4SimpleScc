@@ -3,7 +3,7 @@
     <Metadata>
         <Identity Id="P4SimpleScc_2022.b8cf4ec2-3cff-471c-bb25-d62b1732ac48" Version="3.1" Language="en-US" Publisher="Jeffrey Broome" />
         <DisplayName>P4SimpleScc</DisplayName>
-        <Description xml:space="preserve">P4SimpleScc source code control provider</Description>
+        <Description xml:space="preserve">P4SimpleScc source code control provider for VS2022</Description>
         <License>LICENSE.txt</License>
         <GettingStartedGuide>https://github.com/botman99/P4SimpleScc</GettingStartedGuide>
         <ReleaseNotes>https://github.com/botman99/P4SimpleScc/releases</ReleaseNotes>
