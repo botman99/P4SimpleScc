@@ -6,7 +6,7 @@ The "simple" part of this extension is that it only does **one** thing.  It chec
 
 If all you want is to check out files when modified, and you want something small, fast and efficient, then P4SimpleScc does that task well.
 
-To use P4SimpleScc, just install the extension (there's one for Visual Studio 2019 and one for Visual Studio 2022), then start up Visual Studio and click on "Tools -> Options" from the main menu.  Expand the 'Source Control' group and select 'P4SimpleScc' from the 'Current source control plug-in:' drop down and click "OK".  That will enable the P4SimpleScc provider.
+To use P4SimpleScc, just install the extension (there's one for Visual Studio 2019, one for Visual Studio 2022 and one for Visual Studio 2026), then start up Visual Studio and click on "Tools -> Options" from the main menu.  Expand the 'Source Control' group and select 'P4SimpleScc' (this will show as 'P4SimpleScc;{b205a1b6-2000-4a1c-8680-97fd2219c692}' in Visual Studio 2026) from the 'Current source control plug-in:' drop down and click "OK".  That will enable the P4SimpleScc provider.
 
 ![SourceControl](https://raw.githubusercontent.com/botman99/P4SimpleScc/master/img/Tools_Options_SourceControl.png)
 
@@ -38,7 +38,7 @@ You can also open a file in the document editor and right click on the filename 
 
 ![CheckOutDocument](https://raw.githubusercontent.com/botman99/P4SimpleScc/master/img/CheckOutDocument.png)
 
-If you right click on a file and the file is already checked out, it will show "Check Out File" as being disabled.
+If you right click on a file and the file is already checked out, it will show "Check Out File" as being disabled.  The "Check Out File" menu item will also be disabled if you have P4SimpleScc set as the source control provider but have disabled it for the current solution.
 
 ![FileCheckedOut](https://raw.githubusercontent.com/botman99/P4SimpleScc/master/img/FileCheckedOut.png)
 
