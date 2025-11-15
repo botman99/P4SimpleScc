@@ -56,7 +56,7 @@ namespace P4SimpleScc
 	// Pre-load the package when the command UI context is asserted (the provider will be automatically loaded after restarting the shell if it was active last time the shell was shutdown)
 	[Microsoft.VisualStudio.AsyncPackageHelpers.ProvideAutoLoad("B205A1B6-0000-4A1C-8680-97FD2219C692",PackageAutoLoadFlags.BackgroundLoad)]
 	[Microsoft.VisualStudio.AsyncPackageHelpers.AsyncPackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-#if (!P4SIMPLESCC_VS2026)
+#if P4SIMPLESCC_VS2019
 	[Microsoft.VisualStudio.AsyncPackageHelpers.ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
 	[Microsoft.VisualStudio.AsyncPackageHelpers.ProvideAutoLoad(VSConstants.UICONTEXT.SolutionOpening_string, PackageAutoLoadFlags.BackgroundLoad)]
 #endif
