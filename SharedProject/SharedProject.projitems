@@ -9,9 +9,8 @@
     <Import_RootNamespace>SharedProject</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(MSBuildThisFileDirectory)ActionProviderFactory.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)FileContextProviderFactory.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Guids.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)NodeExtender.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ProvideSolutionProps.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ProvideSourceControlProvider.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SccProvider.cs" />

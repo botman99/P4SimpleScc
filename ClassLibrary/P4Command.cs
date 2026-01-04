@@ -9,6 +9,7 @@ using System.Text;
 using System.Diagnostics;
 using System.Threading;
 using System.IO;
+using System.Collections.Generic;
 
 namespace ClassLibrary
 {
@@ -18,9 +19,9 @@ namespace ClassLibrary
 		private static string user;
 		private static string workspace;
 
-        private StringBuilder stdoutBuilder;
-        private StringBuilder stderrBuilder;
-        private StringBuilder verboseBuilder;
+		private StringBuilder stdoutBuilder;
+		private StringBuilder stderrBuilder;
+		private StringBuilder verboseBuilder;
 
 		private bool StdOutDone;  // wait until OnOutputDataReceived receives e.Data == null to know that stdout has terminated
 		private bool StdErrDone;  // wait until OnErrorDataReceived receives e.Data == null to know that stderr has terminated
@@ -31,7 +32,22 @@ namespace ClassLibrary
 			FileAlreadyCheckedOut,		// the file was already checked out of source control
 			FileNotInSourceControl,		// the file does not exist in source control
 			ErrorCheckingOutFile,		// the file could not be checked out of source control
+			FileReverted,				// the file was successfully reverted in source control
+			FileNotCheckedOut,			// the file was not checked out of source control
+			ErrorRevertingFile,			// the file could not be reverted in source control
 		}
+
+		private struct IsCheckedOutHistoryStruct
+		{
+			public long Milliseconds;
+			public string Filename;
+			public string stdout;
+			public string stderr;
+			public bool return_result;
+		}
+
+		// we keep a local cache of the check out status of files for a short amount of time so that we don't hit the server multiple times for the same file
+		private static List<IsCheckedOutHistoryStruct> IsCheckedOutHistory = new List<IsCheckedOutHistoryStruct>();
 
 		public P4Command()
 		{
@@ -51,7 +67,7 @@ namespace ClassLibrary
 
 		public void Run(string command, string in_port, string in_user, string in_workspace, out string stdout, out string stderr, out string verbose)  // use the specified port, user and workspace for the command
 		{
-	        stdoutBuilder = new StringBuilder();
+			stdoutBuilder = new StringBuilder();
 			stderrBuilder = new StringBuilder();
 			verboseBuilder = new StringBuilder();
 
@@ -313,10 +329,10 @@ namespace ClassLibrary
 			}
 		}
 
-		public void ServerConnect(out string stdout, out string stderr, out string verbose, out bool bIsNotAllWrite)
+		public void ServerConnect(out string stdout, out string stderr, out string verbose, out bool bIsNoAllWrite)
 		{
 			verbose = "";
-			bIsNotAllWrite = true;
+			bIsNoAllWrite = true;  // assume true until known otherwise
 
 			Run("info -s", port, "", "", out stdout, out stderr, out string info_verbose);  // 'info' needs to run on the specified server (to make sure the server is valid)
 			verbose += info_verbose;
@@ -366,7 +382,7 @@ namespace ClassLibrary
 				return;
 			}
 
-			bIsNotAllWrite = Options.Contains("noallwrite") ? true : false;
+			bIsNoAllWrite = Options.Contains("noallwrite") ? true : false;
 
 			// check if Root directory exists on this machine
 			if (!Directory.Exists(Root))
@@ -378,6 +394,32 @@ namespace ClassLibrary
 
 		public bool IsCheckedOut(string Filename, out string stdout, out string stderr, out string verbose)
 		{
+			bool return_result = false;
+
+			// first, remove any old entries from IsCheckedOutHistory...
+			long time_now = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+
+			for (int index = IsCheckedOutHistory.Count - 1; index >= 0; --index)
+			{
+				if (IsCheckedOutHistory[index].Milliseconds + 1000 < time_now)  // remove any entries that are over 1 second old
+				{
+					IsCheckedOutHistory.RemoveAt(index);
+				}
+			}
+
+			// then, check if this file is in the history list...
+			foreach(IsCheckedOutHistoryStruct history in IsCheckedOutHistory)
+			{
+				if (history.Filename == Filename)
+				{
+					stdout = history.stdout;
+					stderr = history.stderr;
+					verbose = "";  // we don't return any verbose text when the file matches an entry in the cache (to prevent duplicate logging)
+
+					return history.return_result;
+				}
+			}
+
 			// see if the file is checked out (for edit, not for integrate)
 			string command = String.Format("fstat -T \"action\" \"{0}\"", Filename);
 			Run(command, out stdout, out stderr, out verbose);
@@ -389,15 +431,25 @@ namespace ClassLibrary
 
 				if (action == "edit")  // if already open for edit then we don't need to do anything
 				{
-					return true;
+					return_result = true;
 				}
 				else if (action == "add")  // if open for add then we don't need to do anything (GitHub issue #4)
 				{
-					return true;
+					return_result = true;
 				}
 			}
 
-			return false;
+			// add the file to the CheckedOutHistory
+			IsCheckedOutHistoryStruct newIsCheckedOut;
+			newIsCheckedOut.Filename = Filename;
+			newIsCheckedOut.stdout = stdout;
+			newIsCheckedOut.stderr = stderr;
+			newIsCheckedOut.Milliseconds = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+			newIsCheckedOut.return_result = return_result;
+
+			IsCheckedOutHistory.Add(newIsCheckedOut);
+
+			return return_result;
 		}
 
 		public CheckOutStatus CheckOutFile(string Filename, out string stdout, out string stderr, out string verbose)
@@ -447,6 +499,93 @@ namespace ClassLibrary
 			}
 
 			return CheckOutStatus.FileCheckedOut;
+		}
+
+		public CheckOutStatus RevertFile(string Filename, out string stdout, out string stderr, out string verbose)
+		{
+			verbose = "";
+
+			// see if the file exists in source control
+			string command = String.Format("fstat -T \"clientFile\" \"{0}\"", Filename);
+			Run(command, out stdout, out stderr, out string clientFile_verbose);
+			verbose += clientFile_verbose;
+
+			if (stderr != null && stderr.Length > 0)
+			{
+				if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+				{
+					return CheckOutStatus.FileNotInSourceControl;
+				}
+				else
+				{
+					return CheckOutStatus.ErrorRevertingFile;
+				}
+			}
+
+			// see if the file is checked out
+			command = String.Format("fstat -T \"action\" \"{0}\"", Filename);
+			Run(command, out stdout, out stderr, out string action_verbose);
+			verbose += action_verbose;
+
+			if (stderr != null || stderr.Length > 0)  // an error will occur if file isn't opened for edit
+			{
+				if (stderr.Contains("Field action doesn't exist."))
+				{
+					return CheckOutStatus.FileNotCheckedOut;
+				}
+			}
+
+			command = String.Format("revert \"{0}\"", Filename);
+			Run(command, out stdout, out stderr, out string edit_verbose);
+			verbose += edit_verbose;
+
+			if (stderr != null && stderr.Length > 0)
+			{
+				return CheckOutStatus.ErrorRevertingFile;
+			}
+
+			return CheckOutStatus.FileReverted;
+		}
+
+		public void GetCheckedOutFiles(out HashSet<string> InFilesCheckedOutAtStart)
+		{
+			InFilesCheckedOutAtStart = new HashSet<string>();
+
+			string command = String.Format("-F \"%action% %depotFile%\" opened");
+			Run(command, out string stdout, out string stderr, out string verbose);
+
+			if (stderr != null && stderr.Length > 0)
+			{
+				return;
+			}
+
+			string[] openedFiles = stdout.Split(new char[] {'\r', '\n'});
+			List<string> depotFiles = new List<string>();
+
+			foreach(string openedFile in openedFiles)
+			{
+				if (openedFile.StartsWith("edit "))
+				{
+					depotFiles.Add(openedFile.Substring(5).Trim(new char[] {'\r', '\n'}));
+				}
+			}
+
+			foreach(string depotFile in depotFiles)
+			{
+				command = String.Format("fstat \"{0}\"", depotFile);
+				Run(command, out stdout, out stderr, out verbose);
+
+				if (stderr == null || stderr.Length == 0)
+				{
+					string clientFile = "";
+					GetField(stdout, "... clientFile", out clientFile);
+
+					if (clientFile != "")
+					{
+						InFilesCheckedOutAtStart.Add(clientFile);
+					}
+				}
+			}
 		}
 	}
 }

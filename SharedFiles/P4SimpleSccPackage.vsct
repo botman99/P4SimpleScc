@@ -104,11 +104,22 @@
         <Parent guid="guidSccProviderCmdSet" id="igrpSourceControlCommands" />
         <Icon guid="ImageCatalogGuid" id="CheckOutItem" />
         <CommandFlag>DynamicVisibility</CommandFlag>
-        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
         <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Check Out File</ButtonText>
           <MenuText>&amp;Check Out File</MenuText>
+        </Strings>
+      </Button>
+      <Button guid="guidSccProviderCmdSet" id="icmdRevertFile" priority="0x0000" type="Button">
+        <Parent guid="guidSccProviderCmdSet" id="igrpSourceControlCommands" />
+        <Icon guid="ImageCatalogGuid" id="UndoCheckedOutItem" />
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <Strings>
+          <ButtonText>Revert File</ButtonText>
+          <MenuText>&amp;Revert File</MenuText>
         </Strings>
       </Button>
 
@@ -117,11 +128,22 @@
         <Parent guid="guidSccProviderCmdSet" id="igrpSourceControlDocumentCommands" />
         <Icon guid="ImageCatalogGuid" id="CheckOutItem" />
         <CommandFlag>DynamicVisibility</CommandFlag>
-        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
         <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Check Out File</ButtonText>
           <MenuText>&amp;Check Out File</MenuText>
+        </Strings>
+      </Button>
+      <Button guid="guidSccProviderCmdSet" id="icmdRevertDocumentFile" priority="0x0000" type="Button">
+        <Parent guid="guidSccProviderCmdSet" id="igrpSourceControlDocumentCommands" />
+        <Icon guid="ImageCatalogGuid" id="UndoCheckedOutItem" />
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <Strings>
+          <ButtonText>Revert File</ButtonText>
+          <MenuText>&amp;Revert File</MenuText>
         </Strings>
       </Button>
 
@@ -133,6 +155,16 @@
         <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Check Out File</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidOpenFolderExtensibilityPackageCmdSet" id="icmdWorkspaceRevertFile" priority="0x0101" type="Button">
+        <Parent guid="guidOpenFolderExtensibilityPackageCmdSet" id="WorkspaceMenuGroup" />
+        <Icon guid="ImageCatalogGuid" id="UndoCheckedOutItem" />
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <Strings>
+          <ButtonText>Revert File</ButtonText>
         </Strings>
       </Button>
 
@@ -161,10 +193,19 @@
     <CommandPlacement guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000">
       <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_ITEM_SCC" />
     </CommandPlacement>
+    <CommandPlacement guid="guidSccProviderCmdSet" id="icmdRevertFile" priority="0x0000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_ITEM_SCC" />
+    </CommandPlacement>
     <CommandPlacement guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000">
       <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_PROJECT_SCC"/>
     </CommandPlacement>
+    <CommandPlacement guid="guidSccProviderCmdSet" id="icmdRevertFile" priority="0x0000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_PROJECT_SCC"/>
+    </CommandPlacement>
     <CommandPlacement guid="guidSccProviderCmdSet" id="icmdCheckOutFile" priority="0x0000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_SOLUTION_SCC"/>
+    </CommandPlacement>
+    <CommandPlacement guid="guidSccProviderCmdSet" id="icmdRevertFile" priority="0x0000">
       <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_SOLUTION_SCC"/>
     </CommandPlacement>
   </CommandPlacements>
@@ -180,6 +221,8 @@
       <IDSymbol name="icmdSolutionConfiguration" value="0x0100" />
       <IDSymbol name="icmdCheckOutFile" value="0x101" />
       <IDSymbol name="icmdCheckOutDocumentFile" value="0x102" />
+      <IDSymbol name="icmdRevertFile" value="0x103" />
+      <IDSymbol name="icmdRevertDocumentFile" value="0x104" />
 
       <IDSymbol name="imenuExplorerSourceControlMenu" value="0x200" />
       <IDSymbol name="igrpExplorerSourceControl" value="0x300" />
@@ -197,6 +240,7 @@
     <GuidSymbol name="guidOpenFolderExtensibilityPackageCmdSet" value="{e37cc989-b956-4a50-9515-b0395b288e4a}">
       <IDSymbol name="WorkspaceMenuGroup" value="0x5020" />
       <IDSymbol name="icmdWorkspaceCheckOutFile" value="0x0501" />
+      <IDSymbol name="icmdWorkspaceRevertFile" value="0x0502" />
     </GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{57eb06ba-f21b-413b-b8a1-eb2988c5c6d9}" >

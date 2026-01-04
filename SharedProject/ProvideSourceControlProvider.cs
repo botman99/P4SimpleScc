@@ -1,5 +1,5 @@
 /***************************************************************************
- 
+
 Copyright (c) Microsoft Corporation. All rights reserved.
 THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
 ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY
@@ -18,65 +18,65 @@ namespace P4SimpleScc
 	/// This attribute registers the source control provider.
 	/// </summary>
 	[AttributeUsage(AttributeTargets.Class)]
-    public sealed class ProvideSourceControlProvider : MsVsShell.RegistrationAttribute
+	public sealed class ProvideSourceControlProvider : MsVsShell.RegistrationAttribute
 	{
-        private readonly string _regName = null;
-        private readonly Guid _regGuid;
-        private readonly Type _packageType;
-        private readonly Type _provider;
-        
-        /// <summary>
-        /// Constructor
-		/// </summary>
-        public ProvideSourceControlProvider(string regName, string sourceControlGuid, Type sccPackage, Type sccProvider)
-		{
-            _regName = regName;
-            _regGuid = new Guid(sourceControlGuid);
-            _packageType = sccPackage;
-            _provider = sccProvider;
-    	}
+		private readonly string _regName = null;
+		private readonly Guid _regGuid;
+		private readonly Type _packageType;
+		private readonly Type _provider;
 
 		/// <summary>
-		///     Called to register this attribute with the given context.  The context
-		///     contains the location where the registration inforomation should be placed.
-		///     It also contains other information such as the type being registered and path information.
+		/// Constructor
 		/// </summary>
-        public override void Register(RegistrationContext context)
+		public ProvideSourceControlProvider(string regName, string sourceControlGuid, Type sccPackage, Type sccProvider)
 		{
-            // http://msdn.microsoft.com/en-us/library/bb165948.aspx
+			_regName = regName;
+			_regGuid = new Guid(sourceControlGuid);
+			_packageType = sccPackage;
+			_provider = sccProvider;
+		}
 
-            // Declare the source control provider, its name, the provider's service 
-            // and aditionally the packages implementing this provider
-            using (Key sccProviders = context.CreateKey("SourceControlProviders"))
-            {
-                using (Key sccProviderKey = sccProviders.CreateSubkey(_regGuid.ToString("B")))
-                {
-                    sccProviderKey.SetValue("", _regName);
-                    sccProviderKey.SetValue("Service", _provider.GUID.ToString("B"));
+		/// <summary>
+		///	 Called to register this attribute with the given context.  The context
+		///	 contains the location where the registration inforomation should be placed.
+		///	 It also contains other information such as the type being registered and path information.
+		/// </summary>
+		public override void Register(RegistrationContext context)
+		{
+			// http://msdn.microsoft.com/en-us/library/bb165948.aspx
 
-                    using (Key sccProviderNameKey = sccProviderKey.CreateSubkey("Name"))
-                    {
-                        sccProviderNameKey.SetValue("", _regName);
-                        sccProviderNameKey.SetValue("Package", _packageType.GUID.ToString("B"));
+			// Declare the source control provider, its name, the provider's service
+			// and aditionally the packages implementing this provider
+			using (Key sccProviders = context.CreateKey("SourceControlProviders"))
+			{
+				using (Key sccProviderKey = sccProviders.CreateSubkey(_regGuid.ToString("B")))
+				{
+					sccProviderKey.SetValue("", _regName);
+					sccProviderKey.SetValue("Service", _provider.GUID.ToString("B"));
 
-                        sccProviderNameKey.Close();
-                    }
+					using (Key sccProviderNameKey = sccProviderKey.CreateSubkey("Name"))
+					{
+						sccProviderNameKey.SetValue("", _regName);
+						sccProviderNameKey.SetValue("Package", _packageType.GUID.ToString("B"));
 
-                    // Additionally, you can create a "Packages" subkey where you can enumerate the dll
-                    // that are used by the source control provider, something like "Package1"="P4SimpleSccProvider.dll"
-                    // but this is not a requirement.
-                    sccProviderKey.Close();
-                }
+						sccProviderNameKey.Close();
+					}
 
-                sccProviders.Close();
-            }
+					// Additionally, you can create a "Packages" subkey where you can enumerate the dll
+					// that are used by the source control provider, something like "Package1"="P4SimpleSccProvider.dll"
+					// but this is not a requirement.
+					sccProviderKey.Close();
+				}
+
+				sccProviders.Close();
+			}
 		}
 
 		/// <summary>
 		/// Unregister the source control provider
 		/// </summary>
 		/// <param name="context">The Registration Context to be unregistered</param>
-        public override void Unregister(RegistrationContext context)
+		public override void Unregister(RegistrationContext context)
 		{
 		}
 	}

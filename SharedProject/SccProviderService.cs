@@ -14,10 +14,14 @@ using System;
 using System.IO;
 using System.Diagnostics;
 using System.Globalization;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Imaging.Interop;
+using Microsoft.VisualStudio.Imaging;
+using Microsoft.VisualStudio.Workspace.VSIntegration.UI;
 
 namespace P4SimpleScc
 {
@@ -28,15 +32,29 @@ namespace P4SimpleScc
 		IVsSolutionEvents,			// We'll register for solution events, these are useful for source control
 		IVsSolutionEvents7,			// We'll register for folder events, these are useful for source control
 		IVsQueryEditQuerySave2,		// Required to allow editing of controlled files
-		IDisposable 
+		IVsSccGlyphs2,
+		IDisposable
 	{
 		// Whether the provider is active or not
-		private bool _active = false;
+		private static bool _active = false;
 		// The service and source control provider
 		private SccProvider _sccProvider = null;
-		// The cookie for solution events 
+		// The cookie for solution events
 		private uint _vsSolutionEventsCookie;
 
+		// Const variable containing the number of default Image Monikers that are available for use as Source Control icons in the Solution Explorer.
+		private const int _DefaultSCCMonikersListSize = (int)VsStateIcon.STATEICON_MAXINDEX;
+
+		// Enumeration for custom SCC monikers
+		enum CustomSCCMonikers
+		{
+			Custom_Blank = _DefaultSCCMonikersListSize,
+			Custom_CheckedOut = _DefaultSCCMonikersListSize + 1,
+			// Add additional enumerations here
+		};
+
+		// Create a new moniker list to contain the new monikers.
+		private readonly IVsImageMonikerImageList monikerList = new MonikerList();
 
 		#region SccProvider Service initialization/unitialization
 
@@ -130,7 +148,7 @@ namespace P4SimpleScc
 
 			if (pszProvider.CompareTo(_sccProvider.ProviderName)!=0)
 			{
-				// If the provider name controlling this project is not our provider, the user may be adding to a 
+				// If the provider name controlling this project is not our provider, the user may be adding to a
 				// solution controlled by this provider an existing project controlled by some other provider.
 				// We'll deny the registration with scc in such case.
 				return VSConstants.E_FAIL;
@@ -151,12 +169,68 @@ namespace P4SimpleScc
 
 		public int GetSccGlyph(int cFiles, string[] rgpszFullPaths, VsStateIcon[] rgsiGlyphs, uint[] rgdwSccStatus)
 		{
+			Debug.Assert(cFiles == 1, "Only getting one file icon at a time is supported");
+
+			if (SccProvider.SolutionConfigType == 0)
+			{
+				return VSConstants.S_OK;
+			}
+
+			if (SccProvider.bShouldSkipGetSccGlyphCheckoutStatus)
+			{
+				if (SccProvider.FilesCheckedOut.Contains(rgpszFullPaths[0]))
+				{
+					rgsiGlyphs[0] = (VsStateIcon)(CustomSCCMonikers.Custom_CheckedOut);
+					if (rgdwSccStatus != null)
+					{
+						rgdwSccStatus[0] = (uint) __SccStatus.SCC_STATUS_CHECKEDOUT;
+					}
+				}
+				else
+				{
+					rgsiGlyphs[0] = (VsStateIcon)(CustomSCCMonikers.Custom_Blank);
+					if (rgdwSccStatus != null)
+					{
+						rgdwSccStatus[0] = (uint) __SccStatus.SCC_STATUS_NOTCONTROLLED;
+					}
+				}
+
+				return VSConstants.S_OK;
+			}
+
+			bool bIsCheckedOut = SccProvider.IsCheckedOut(rgpszFullPaths[0], out string stderr);
+
+			if (bIsCheckedOut)
+			{
+				rgsiGlyphs[0] = (VsStateIcon)(CustomSCCMonikers.Custom_CheckedOut);
+				if (rgdwSccStatus != null)
+				{
+					rgdwSccStatus[0] = (uint) __SccStatus.SCC_STATUS_CHECKEDOUT;
+				}
+			}
+			else
+			{
+				rgsiGlyphs[0] = (VsStateIcon)(CustomSCCMonikers.Custom_Blank);
+				if (rgdwSccStatus != null)
+				{
+					rgdwSccStatus[0] = (uint) __SccStatus.SCC_STATUS_NOTCONTROLLED;
+				}
+			}
+
 			return VSConstants.S_OK;
 		}
 
 		public int GetSccGlyphFromStatus(uint dwSccStatus, VsStateIcon[] psiGlyph)
 		{
-			psiGlyph[0] = VsStateIcon.STATEICON_BLANK; 
+			switch (dwSccStatus)
+			{
+				case (uint) __SccStatus.SCC_STATUS_CHECKEDOUT:
+					psiGlyph[0] = (VsStateIcon)(CustomSCCMonikers.Custom_CheckedOut);
+					break;
+				default:
+					psiGlyph[0] = (VsStateIcon)(CustomSCCMonikers.Custom_Blank);
+					break;
+			}
 			return VSConstants.S_OK;
 		}
 
@@ -258,6 +332,7 @@ namespace P4SimpleScc
 			_sccProvider.AfterOpenSolutionOrFolder();
 
 			_sccProvider.bIsWorkspace = true;  // we opened a folder, not a solution
+			NodeExtender.WorkspaceVisualNodeBaseList = new List<WorkspaceVisualNodeBase>();
 		}
 
 		public void OnQueryCloseFolder(string folderPath, ref int pfCancel)
@@ -307,7 +382,7 @@ namespace P4SimpleScc
 			{
 				if (_sccProvider.bCheckOutOnEdit)
 				{
-					try 
+					try
 					{
 						//Iterate through all the files
 						for (int iFile = 0; iFile < cFiles; iFile++)
@@ -389,7 +464,7 @@ namespace P4SimpleScc
 			// The last file will win setting this flag
 			pdwQSResult = (uint)tagVSQuerySaveResult.QSR_SaveOK;
 
-			// In non-UI mode attempt to silently flip the attributes of files or check them out 
+			// In non-UI mode attempt to silently flip the attributes of files or check them out
 			// and allow the save, because the user cannot be asked what to do with the file
 			if (_sccProvider.InCommandLineMode())
 			{
@@ -400,7 +475,7 @@ namespace P4SimpleScc
 			{
 				if (!_sccProvider.bCheckOutOnEdit)
 				{
-					try 
+					try
 					{
 						//Iterate through all the files
 						for (int iFile = 0; iFile < cFiles; iFile++)
@@ -444,7 +519,7 @@ namespace P4SimpleScc
 					}
 				}
 			}
-	 
+	
 			return VSConstants.S_OK;
 		}
 
@@ -496,6 +571,61 @@ namespace P4SimpleScc
 
 		#endregion  // IVsQueryEditQuerySave2
 
+		//----------------------------------------------------------------------------
+		// IVsSccGlyphs2 specific functions
+		//--------------------------------------------------------------------------------
+		#region IVsSccGlyphs2 interface functions
+
+		IVsImageMonikerImageList IVsSccGlyphs2.GetCustomGlyphMonikerList(uint baseIndex)
+		{
+			return monikerList;
+		}
+
+		#endregion  // IVsSccGlyphs2
+
+		/// <summary>
+		/// Define the custom monikers to be displayed in the moniker list. In this case, we are using
+		/// predefined image monikers from the known moniker list.
+		/// </summary>
+		private class MonikerList : IVsImageMonikerImageList
+		{
+			/// <summary>
+			/// This list of custom monikers will be appended to the standard moniker list
+			/// </summary>
+			List<ImageMoniker> monikers = new List<ImageMoniker>
+			{
+				KnownMonikers.Blank,
+				KnownMonikers.CheckedOutForEdit,
+				// Add additional monikers here
+			};
+
+			/// <summary>
+			/// Function required by IVsImageMonikerList
+			/// </summary>
+			public int ImageCount
+			{
+				get
+				{
+					return monikers.Count;
+				}
+			}
+
+			/// <summary>
+			/// Add custom image monikers to array of monikers.
+			/// </summary>
+			/// <param name="firstImageIndex">Index value of the first custom moniker to add.</param>
+			/// <param name="imageMonikerCount">Number of image monikers to add to array</param>
+			/// <param name="imageMonikers">Array of image monikers. Assign custom monikers to elements of this array</param>
+			public void GetImageMonikers(int firstImageIndex, int imageMonikerCount, ImageMoniker[] imageMonikers)
+			{
+				for (int ii = 0; ii < imageMonikerCount; ii++)
+				{
+					imageMonikers[ii] = monikers[firstImageIndex + ii];
+				}
+			}
+		}
+
+
 		private int OnBeforeCloseSolutionOrFolder()
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
@@ -531,13 +661,13 @@ namespace P4SimpleScc
 			return VSConstants.S_OK;
 		}
 
-        /// <summary>
-        /// Returns whether this source control provider is the active scc provider.
-        /// </summary>
-        public bool Active
-        {
-            get { return _active; }
-        }
+		/// <summary>
+		/// Returns whether this source control provider is the active scc provider.
+		/// </summary>
+		public static bool Active
+		{
+			get { return _active; }
+		}
 
 	}
 }

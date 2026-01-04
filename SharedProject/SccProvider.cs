@@ -15,6 +15,8 @@ using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Settings;
 using Microsoft.VisualStudio.Shell.Settings;
+using Microsoft.VisualStudio.Workspace.VSIntegration.UI;
+
 using PackageAutoLoadFlags = Microsoft.VisualStudio.AsyncPackageHelpers.PackageAutoLoadFlags;
 using EnvDTE;
 
@@ -88,7 +90,7 @@ namespace P4SimpleScc
 
 		private static MsVsShell.Package package;
 		public static System.IServiceProvider serviceProvider = null;
-        private IOleCommandTarget pkgCommandTarget = null;
+		private IOleCommandTarget pkgCommandTarget = null;
 
 		public static Guid OutputPaneGuid = Guid.Empty;
 
@@ -105,6 +107,7 @@ namespace P4SimpleScc
 
 		// P4SimpleScc solution configuration settings...
 		public static int SolutionConfigType = 0;  // 0 = disabled, 1 = automatic, 2 = manual settings
+		public static bool bUseNoAllWriteOptimization = false;
 		public bool bCheckOutOnEdit = true;
 		public bool bPromptForCheckout = false;
 		public string P4Port = "";
@@ -115,18 +118,31 @@ namespace P4SimpleScc
 
 		public static bool P4SimpleSccConfigDirty = false;  // has the solution configuration for this solution been modified (and needs to be saved)?
 
-		public static bool bIsNotAllWrite = true;
+		// 'noallwrite' will be set in Workspace options if 'allwrite' is unchecked in P4V (this causes 'bIsNoAllWrite' to be set to true)
+		public static bool bIsNoAllWrite = true;
 
 		private static object OpututQueueLock = new object();
 		private static List<string> OutputQueueList = new List<string>();
 		private System.Windows.Threading.DispatcherTimer OutputQueueTimer = null;
 
 		private static char[] InvalidChars;
-		private	List<string> FilenameList = new List<string>();
+
+		// these are used by NodeExtender to keep track of which files are checked out so we can set the StateIcon properly
+		public static HashSet<string> FilesCheckedOut = new HashSet<string>();
+
+		// from C:\Program Files\Microsoft Visual Studio\2022\Professional\VSSDK\VisualStudioIntegration\Common\Inc\dteinternal.h
+		private static Guid vsProjectItemKindPhysicalFile = new Guid("6bb5f8ee-4483-11d3-8bcf-00c04f8ec28c");
+
+		// GetSccGlyph will attempt to check the status of every single file in the solution at startup, this is extremely
+		// slow on solutions with thousands of files.  We skip this check at startup and use the FilesCheckedOutAtStart list
+		// instead and then set 'bShouldSkipGetSccGlyphCheckoutStatus' to false when someone checks out or reverts a file.
+		public static bool bShouldSkipGetSccGlyphCheckoutStatus = true;
 
 		private CommandID menuCommandId;
 		private CommandID menuCheckOutFileCommandId;
 		private CommandID menuCheckOutDocumentFileCommandId;
+		private CommandID menuRevertFileCommandId;
+		private CommandID menuRevertDocumentFileCommandId;
 
 		/// <summary>
 		/// Command ID.
@@ -134,7 +150,11 @@ namespace P4SimpleScc
 		public const int icmdSolutionConfiguration = 0x0100;
 		public const int icmdCheckOutFile = 0x101;
 		public const int icmdCheckOutDocumentFile = 0x102;
-        public const int icmdWorkspaceCheckOutFile = 0x0501;
+		public const int icmdWorkspaceCheckOutFile = 0x0501;
+
+		public const int icmdRevertFile = 0x103;
+		public const int icmdRevertDocumentFile = 0x104;
+		public const int icmdWorkspaceRevertFile = 0x0502;
 
 
 		/// <summary>
@@ -144,7 +164,7 @@ namespace P4SimpleScc
 		{
 			// The provider implements the IVsPersistSolutionProps interface which is derived from IVsPersistSolutionOpts,
 			// The base class MsVsShell.Package also implements IVsPersistSolutionOpts, so we're overriding its functionality
-			// Therefore, to persist user options in the suo file we will not use the set of AddOptionKey/OnLoadOptions/OnSaveOptions 
+			// Therefore, to persist user options in the suo file we will not use the set of AddOptionKey/OnLoadOptions/OnSaveOptions
 			// set of functions, but instead we'll use the IVsPersistSolutionProps functions directly.
 		}
 
@@ -171,7 +191,7 @@ namespace P4SimpleScc
 
 			package = this;
 			serviceProvider = package as System.IServiceProvider;
-            pkgCommandTarget = GetService(typeof(IOleCommandTarget)) as IOleCommandTarget;
+			pkgCommandTarget = GetService(typeof(IOleCommandTarget)) as IOleCommandTarget;
 
 			base.Initialize();
 
@@ -194,9 +214,17 @@ namespace P4SimpleScc
 				MenuCommand menuCheckOutFileCmd = new MenuCommand(new EventHandler(Exec_menuCheckOutFileCommand), menuCheckOutFileCommandId);
 				mcs.AddCommand(menuCheckOutFileCmd);
 
+				menuRevertFileCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdRevertFile);
+				MenuCommand menuRevertFileCmd = new MenuCommand(new EventHandler(Exec_menuRevertFileCommand), menuRevertFileCommandId);
+				mcs.AddCommand(menuRevertFileCmd);
+
 				menuCheckOutDocumentFileCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdCheckOutDocumentFile);
-				MenuCommand menuCheckOutDocumentFileCmd = new MenuCommand(new EventHandler(Exec_menuCheckOutFileCommand), menuCheckOutDocumentFileCommandId);
+				MenuCommand menuCheckOutDocumentFileCmd = new MenuCommand(new EventHandler(Exec_menuCheckOutDocumentFileCommand), menuCheckOutDocumentFileCommandId);
 				mcs.AddCommand(menuCheckOutDocumentFileCmd);
+
+				menuRevertDocumentFileCommandId = new CommandID(GuidList.guidSccProviderCmdSet, icmdRevertDocumentFile);
+				MenuCommand menuRevertDocumentFileCmd = new MenuCommand(new EventHandler(Exec_menuRevertDocumentFileCommand), menuRevertDocumentFileCommandId);
+				mcs.AddCommand(menuRevertDocumentFileCmd);
 			}
 
 			bool bP4SimpleSccEnabled = false;
@@ -232,6 +260,7 @@ namespace P4SimpleScc
 				if ((attribute & FileAttributes.Directory) == FileAttributes.Directory)
 				{
 					bIsWorkspace = true;
+					NodeExtender.WorkspaceVisualNodeBaseList = new List<WorkspaceVisualNodeBase>();
 				}
 				else
 				{
@@ -247,7 +276,7 @@ namespace P4SimpleScc
 						solPersistence.LoadPackageUserOpts(this, _strSolutionUserOptionsKey);
 					}
 
-	                if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
+					if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
 					{
 						string message = String.Format("Loaded solution: {0}\n", solutionFile);
 						SccProvider.P4SimpleSccQueueOutput(message);
@@ -385,7 +414,7 @@ namespace P4SimpleScc
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-			// The shell will create a stream for the section of interest, and will call back the provider on 
+			// The shell will create a stream for the section of interest, and will call back the provider on
 			// IVsPersistSolutionProps.WriteUserOptions() to save specific options under the specified key.
 			if (P4SimpleSccConfigDirty)
 			{
@@ -401,8 +430,8 @@ namespace P4SimpleScc
 
 			// Note this can be during opening a new solution, or may be during merging of 2 solutions.
 			// The provider calls the shell back to let it know which options keys from the suo file were written by this provider.
-			// If the shell will find in the suo file a section that belong to this package, it will create a stream, 
-			// and will call back the provider on IVsPersistSolutionProps.ReadUserOptions() to read specific options 
+			// If the shell will find in the suo file a section that belong to this package, it will create a stream,
+			// and will call back the provider on IVsPersistSolutionProps.ReadUserOptions() to read specific options
 			// under that option key.
 			pPersistence.LoadPackageUserOpts(this, _strSolutionUserOptionsKey);
 
@@ -442,7 +471,7 @@ namespace P4SimpleScc
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
 			// This function is called by the shell if the _strSolutionUserOptionsKey section declared
-			// in LoadUserOptions() as being written by this package has been found in the suo file. 
+			// in LoadUserOptions() as being written by this package has been found in the suo file.
 			// Note this can be during opening a new solution, or may be during merging of 2 solutions.
 			// A good source control provider may need to persist this data until OnAfterOpenSolution or OnAfterMergeSolution is called
 
@@ -465,6 +494,9 @@ namespace P4SimpleScc
 					Config.Load(config_string);
 
 					Config.Get(Config.KEY.SolutionConfigType, ref SolutionConfigType);
+
+					Config.Get(Config.KEY.SolutionConfigAllWriteOptimization, ref bUseNoAllWriteOptimization);
+
 					Config.Get(Config.KEY.SolutionConfigCheckOutOnEdit, ref bCheckOutOnEdit);
 					Config.Get(Config.KEY.SolutionConfigPromptForCheckout, ref bPromptForCheckout);
 
@@ -485,13 +517,13 @@ namespace P4SimpleScc
 
 				GetSolutionFileName();					
 
-                if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
-                {
-                    string message = String.Format("Loaded solution: {0}\n", solutionFile);
-                    SccProvider.P4SimpleSccQueueOutput(message);
+				if (!bSolutionLoadedOutputDone && (solutionDirectory != null) && (solutionDirectory.Length > 0))
+				{
+					string message = String.Format("Loaded solution: {0}\n", solutionFile);
+					SccProvider.P4SimpleSccQueueOutput(message);
 
-                    bSolutionLoadedOutputDone = true;
-                }
+					bSolutionLoadedOutputDone = true;
+				}
 
 				if (SolutionConfigType != 0)
 				{
@@ -502,7 +534,7 @@ namespace P4SimpleScc
 
 					ServerConnect();
 				}
-            }
+			}
 
 			return VSConstants.S_OK;
 		}
@@ -547,6 +579,8 @@ namespace P4SimpleScc
 				P4SimpleSccConfigDirty = true;  // we need to save these settings (so that we save the 'disabled' setting)
 			}
 
+			ClassLibrary.P4Command p4 = new ClassLibrary.P4Command();
+
 			if (GetSolutionFileName() != null && !String.IsNullOrEmpty(solutionDirectory))
 			{
 				if (!bReadUserOptionsCalled)  // don't automatically change anything if previous solution settings exists
@@ -554,7 +588,6 @@ namespace P4SimpleScc
 					// We may have a P4CONFIG file (https://www.perforce.com/manuals/v23.1/cmdref/Content/CmdRef/P4CONFIG.html),
 					// in which case we want to default the solution config to automatic.
 					// Start with checking whether P4 is even configured to look for one.
-					ClassLibrary.P4Command p4 = new ClassLibrary.P4Command();
 					p4.RunP4Set(solutionDirectory, out string P4Port, out string P4User, out string P4Client, out string P4Config, out string verbose);
 					if (!string.IsNullOrEmpty(P4Config))
 					{
@@ -596,10 +629,102 @@ namespace P4SimpleScc
 					}
 				}
 			}
+
+			if (SolutionConfigType != 0)
+			{
+				bShouldSkipGetSccGlyphCheckoutStatus = true;
+				FilesCheckedOut = new HashSet<string>();
+
+				p4.GetCheckedOutFiles(out FilesCheckedOut);
+
+				if (FilesCheckedOut.Count > 0)
+				{
+					// This code is needed if you launch Visual Studio by double clicking on a solution file.
+					// This SccProvider is slow to load and the GetSccGlyph in SccProviderServices will not be loaded
+					// by the time the solution explorer displays files.  The FilesCheckedOut will be populated
+					// several seconds after the solution is fully loaded and so we need to update the glyph of
+					// each file that is already checked out.  If you start Visual Studio and the load a project,
+					// the SccProvider will be loaded and the 'FilesCheckedOut' list will be populated before
+					// GetSccGlyph in SccProviderServices gets a chance to run (and that code will automatically
+					// update the glyph on each of the checked out files.
+
+					IVsSolution sol = (IVsSolution)GetService(typeof(SVsSolution));
+					if (sol != null)
+					{
+						List<string> ProjectFilenames = new List<string>();
+						List<IVsHierarchy> ProjectHierarchy = new List<IVsHierarchy>();
+
+						// gather the list of projects in this solution up front so we don't have to iterate it for each project file below
+						Guid nullGuid = Guid.Empty;
+						int hr = sol.GetProjectEnum((uint)(__VSENUMPROJFLAGS.EPF_LOADEDINSOLUTION), ref nullGuid, out IEnumHierarchies enumHierarchies);
+						if (hr == VSConstants.S_OK)
+						{
+							IVsHierarchy[] hierarchy = new IVsHierarchy[1];
+							while (enumHierarchies.Next(1, hierarchy, out uint fetched) == VSConstants.S_OK && fetched == 1)
+							{
+								if (hierarchy[0] != null)
+								{
+									hierarchy[0].GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ExtObject, out object obj);
+									Project project = obj as Project;
+
+									if ((project != null) && (project.FullName != null)&& (project.FullName != ""))
+									{
+										ProjectFilenames.Add(project.FullName);
+										ProjectHierarchy.Add(hierarchy[0]);
+									}
+								}
+							}
+						}
+
+						EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+						if (dte2 != null)
+						{
+							foreach (string Filename in FilesCheckedOut)
+							{
+								ProjectItem item = dte2.Solution.FindProjectItem(Filename);
+								if (item == null)  // if there is no project item, then this Filename is a project filename
+								{
+									for (int index = 0; index < ProjectFilenames.Count; ++index)
+									{
+										if (ProjectFilenames[index] == Filename)
+										{
+											ProjectHierarchy[index].ParseCanonicalName(Filename, out uint itemId);
+
+											VSITEMSELECTION itemSelection = new VSITEMSELECTION();
+											itemSelection.pHier = ProjectHierarchy[index];
+											itemSelection.itemid = itemId;
+
+											UpdateGlyphOnSelectedFile(itemSelection, Filename);
+
+											break;			
+										}
+									}
+								}
+								else
+								{
+									Project project = item.ContainingProject;
+
+									sol.GetProjectOfUniqueName(project.UniqueName, out IVsHierarchy projectHierarchy);
+									if (projectHierarchy != null)
+									{
+										projectHierarchy.ParseCanonicalName(Filename, out uint itemId);
+
+										VSITEMSELECTION itemSelection = new VSITEMSELECTION();
+										itemSelection.pHier = projectHierarchy;
+										itemSelection.itemid = itemId;
+
+										UpdateGlyphOnSelectedFile(itemSelection, Filename);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 
 
-        #region Source Control Command Enabling
+		#region Source Control Command Enabling
 
 		public int QueryStatus(ref Guid pguidCmdGroup, uint cCmds, OLECMD[] prgCmds, System.IntPtr pCmdText)
 		{
@@ -608,126 +733,175 @@ namespace P4SimpleScc
 
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-            if ((pguidCmdGroup == GuidList.guidSccProviderCmdSet) || (pguidCmdGroup != GuidList.GuidOpenFolderExtensibilityPackageCmdSet))
-            {
-	            // All source control commands needs to be hidden and disabled when the provider is not active
-	            if (!sccService.Active)
+			if ((pguidCmdGroup == GuidList.guidSccProviderCmdSet) || (pguidCmdGroup != GuidList.GuidOpenFolderExtensibilityPackageCmdSet))
+			{
+				// All source control commands needs to be hidden and disabled when the provider is not active
+				if (!SccProviderService.Active)
 				{
-	                prgCmds[0].cmdf = (int)OLECMDF.OLECMDF_INVISIBLE & (int)~(OLECMDF.OLECMDF_ENABLED);
-	                return VSConstants.S_OK;
+					prgCmds[0].cmdf = (int)OLECMDF.OLECMDF_INVISIBLE & (int)~(OLECMDF.OLECMDF_ENABLED);
+					return VSConstants.S_OK;
 				}
 
 				if (prgCmds[0].cmdID == icmdSolutionConfiguration)
 				{
-	                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
-		            return VSConstants.S_OK;
+					prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+					return VSConstants.S_OK;
 				}
 				else if (prgCmds[0].cmdID == icmdCheckOutFile)
 				{
 					if (SolutionConfigType == 0)
 					{
-		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
-			            return VSConstants.S_OK;
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+						return VSConstants.S_OK;
 					}
 
-					FilenameList = new List<string>();
+					GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> vsItemSelections, out List<string> Filenames);
+
+					Debug.Assert(vsItemSelections.Count == Filenames.Count, "selectedNodes and selectedFiles not the same count");
+
 					bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
 
-					EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2; 
-					if (dte2 != null)
+					foreach (string Filename in Filenames)
 					{
-						EnvDTE.UIHierarchy uih = dte2.ToolWindows.SolutionExplorer;
-						System.Array selectedItems = (System.Array)uih.SelectedItems;
+						bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
 
-						foreach (UIHierarchyItem selItem in selectedItems)
+						bool bShouldIgnoreStatus = false;
+						if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 						{
-							ProjectItem projItem = selItem.Object as ProjectItem;
-							if (projItem != null)
-							{
-								string Filename = projItem.Properties.Item("FullPath").Value.ToString();
+							bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+						}
 
-								if (Filename != "")
-								{
-									FilenameList.Add(Filename);
-
-									bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
-
-									bool bShouldIgnoreStatus = false;
-									if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
-									{
-										bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
-									}
-
-									if (!bIsCheckedOut && !bShouldIgnoreStatus)
-									{
-										bAllFilesAreCheckedOut = false;
-									}
-								}
-							}
+						if (!bIsCheckedOut && !bShouldIgnoreStatus)
+						{
+							bAllFilesAreCheckedOut = false;
 						}
 					}
 
 					if (bAllFilesAreCheckedOut)
 					{
-		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
 					else
 					{
-		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
 
-		            return VSConstants.S_OK;
+					return VSConstants.S_OK;
 				}
+				else if (prgCmds[0].cmdID == icmdRevertFile)
+				{
+					if (SolutionConfigType == 0)
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+						return VSConstants.S_OK;
+					}
 
+					GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> vsItemSelections, out List<string> Filenames);
+
+					Debug.Assert(vsItemSelections.Count == Filenames.Count, "selectedNodes and selectedFiles not the same count");
+
+					bool bNoFilesAreCheckedOut = true;  // assume no files are checked out
+
+					foreach (string Filename in Filenames)
+					{
+						bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+						bool bShouldIgnoreStatus = false;
+						if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+						{
+							bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+						}
+
+						if (bIsCheckedOut && !bShouldIgnoreStatus)
+						{
+							bNoFilesAreCheckedOut = false;
+						}
+					}
+
+					if (bNoFilesAreCheckedOut)
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+					}
+					else
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+					}
+
+					return VSConstants.S_OK;
+				}
 				else if (prgCmds[0].cmdID == icmdCheckOutDocumentFile)
 				{
 					if (SolutionConfigType == 0)
 					{
-		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
-			            return VSConstants.S_OK;
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+						return VSConstants.S_OK;
 					}
 
-					FilenameList = new List<string>();
-					bool bAllFilesAreCheckedOut = true;  // assume all files are checked out
+					string Filename = "";
 
-					EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2; 
+					EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
 					if (dte2 != null)
 					{
-						string Filename = dte2.ActiveDocument.FullName;
-
-						if (Filename != "")
-						{
-							FilenameList.Add(Filename);
-
-							bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
-
-							bool bShouldIgnoreStatus = false;
-							if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
-							{
-								bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
-							}
-
-							if (!bIsCheckedOut && !bShouldIgnoreStatus)
-							{
-								bAllFilesAreCheckedOut = false;
-							}
-						}
+						Filename = dte2.ActiveDocument.FullName;
 					}
 
-					if (bAllFilesAreCheckedOut)
+					bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+					bool bShouldIgnoreStatus = false;
+					if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
 					{
-		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+						bShouldIgnoreStatus = true;  // not under workspace or not under source control
+					}
+
+					if (bIsCheckedOut || bShouldIgnoreStatus)
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
 					else
 					{
-		                prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
 					}
 
-		            return VSConstants.S_OK;
+					return VSConstants.S_OK;
+				}
+				else if (prgCmds[0].cmdID == icmdRevertDocumentFile)
+				{
+					if (SolutionConfigType == 0)
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+						return VSConstants.S_OK;
+					}
+
+					string Filename = "";
+
+					EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+					if (dte2 != null)
+					{
+						Filename = dte2.ActiveDocument.FullName;
+					}
+
+					bool bIsCheckedOut = IsCheckedOut(Filename, out string stderr);
+
+					bool bShouldIgnoreStatus = false;
+					if (stderr.Contains("is not under client's root") || stderr.Contains("not in client view") || stderr.Contains("no such file"))  // if file is outside client's workspace, or file does not exist in source control...
+					{
+						bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
+					}
+
+					if (!bIsCheckedOut || bShouldIgnoreStatus)
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_SUPPORTED;
+					}
+					else
+					{
+						prgCmds[0].cmdf = (uint)OLECMDF.OLECMDF_ENABLED | (uint)OLECMDF.OLECMDF_SUPPORTED;
+					}
+
+					return VSConstants.S_OK;
 				}
 			}
 
-            return this.pkgCommandTarget.QueryStatus(ref pguidCmdGroup, cCmds, prgCmds, pCmdText);
+			return this.pkgCommandTarget.QueryStatus(ref pguidCmdGroup, cCmds, prgCmds, pCmdText);
 		}
 
 		#endregion // Source Control Command Enabling
@@ -755,7 +929,7 @@ namespace P4SimpleScc
 			int pos_y = -1;
 			Config.Get(Config.KEY.SolutionConfigDialogPosY, ref pos_y);
 
-			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bCheckOutOnEdit, bPromptForCheckout, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
+			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bUseNoAllWriteOptimization, bCheckOutOnEdit, bPromptForCheckout, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
 
 			System.Windows.Forms.DialogResult result = Dialog.ShowDialog();
 
@@ -771,6 +945,7 @@ namespace P4SimpleScc
 			{
 				// set the global configuration settings
 				SolutionConfigType = Dialog.SolutionConfigType;
+				bUseNoAllWriteOptimization = Dialog.bUseNoAllWriteOptimization;
 				bCheckOutOnEdit = Dialog.bCheckOutOnEdit;
 				bPromptForCheckout = Dialog.bPromptForCheckout;
 				bVerboseOutput = Dialog.bVerboseOutput;
@@ -808,6 +983,8 @@ namespace P4SimpleScc
 				Config.Set(Config.KEY.SolutionConfigDialogP4User, P4User);
 				Config.Set(Config.KEY.SolutionConfigDialogP4Client, P4Client);
 
+				Config.Set(Config.KEY.SolutionConfigAllWriteOptimization, bUseNoAllWriteOptimization);
+
 				Config.Set(Config.KEY.SolutionConfigVerboseOutput, bVerboseOutput);
 				Config.Set(Config.KEY.SolutionConfigOutputEnabled, bOutputEnabled);
 
@@ -824,13 +1001,376 @@ namespace P4SimpleScc
 		{
 			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
 
-			foreach (string Filename in FilenameList)
+			bShouldSkipGetSccGlyphCheckoutStatus = false;
+
+			if (bIsWorkspace)
 			{
-				CheckOutFile(Filename);
+				List<string> Filenames = GetSelectedWorkspaceFiles();
+
+				foreach (string Filename in Filenames)
+				{
+					if (CheckOutFile(Filename))
+					{
+						foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
+						{
+							IFileNode FileNode = NodeBase as IFileNode;
+							if ((FileNode != null) && (FileNode.FullPath == Filename))
+							{
+								NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_CheckedOutForEdit_Id);
+							}
+						}
+					}
+				}
+			}
+			else  // solution
+			{
+				GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> selectedNodes, out List<string> selectedFiles);
+
+				Debug.Assert(selectedNodes.Count == selectedFiles.Count, "selectedNodes and selectedFiles not the same count");
+
+				for (int index = 0; index < selectedNodes.Count; index++)
+				{
+					if (CheckOutFile(selectedFiles[index]))
+					{
+						UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+					}
+				}
+			}
+		}
+
+		private void Exec_menuCheckOutDocumentFileCommand(object sender, EventArgs e)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			bShouldSkipGetSccGlyphCheckoutStatus = false;
+
+			if (bIsWorkspace)
+			{
+				string Filename = "";
+
+				EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+				if (dte2 != null)
+				{
+					Filename = dte2.ActiveDocument.FullName;
+				}
+
+				if (CheckOutFile(Filename))
+				{
+					foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
+					{
+						IFileNode FileNode = NodeBase as IFileNode;
+						if ((FileNode != null) && (FileNode.FullPath == Filename))
+						{
+							NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_CheckedOutForEdit_Id);
+						}
+					}
+				}
+			}
+			else  // solution
+			{
+				GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> selectedNodes, out List<string> selectedFiles);
+
+				Debug.Assert(selectedNodes.Count == selectedFiles.Count, "selectedNodes and selectedFiles not the same count");
+
+				for (int index = 0; index < selectedNodes.Count; index++)
+				{
+					if (CheckOutFile(selectedFiles[index]))
+					{
+						UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+					}
+				}
+			}
+		}
+
+		private void Exec_menuRevertFileCommand(object sender, EventArgs e)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			bShouldSkipGetSccGlyphCheckoutStatus = false;
+
+			if (bIsWorkspace)
+			{
+				List<string> Filenames = GetSelectedWorkspaceFiles();
+
+				foreach (string Filename in Filenames)
+				{
+					if (RevertFile(Filename))
+					{
+						foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
+						{
+							IFileNode FileNode = NodeBase as IFileNode;
+							if ((FileNode != null) && (FileNode.FullPath == Filename))
+							{
+								NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_Blank_Id);
+							}
+						}
+					}
+				}
+			}
+			else  // solution
+			{
+				GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> selectedNodes, out List<string> selectedFiles);
+
+				Debug.Assert(selectedNodes.Count == selectedFiles.Count, "selectedNodes and selectedFiles not the same count");
+
+				for (int index = 0; index < selectedNodes.Count; index++)
+				{
+					if (RevertFile(selectedFiles[index]))
+					{
+						UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+					}
+				}
+			}
+		}
+
+		private void Exec_menuRevertDocumentFileCommand(object sender, EventArgs e)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			bShouldSkipGetSccGlyphCheckoutStatus = false;
+
+			if (bIsWorkspace)
+			{
+				string Filename = "";
+
+				EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+				if (dte2 != null)
+				{
+					Filename = dte2.ActiveDocument.FullName;
+				}
+
+				if (RevertFile(Filename))
+				{
+					foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
+					{
+						IFileNode FileNode = NodeBase as IFileNode;
+						if ((FileNode != null) && (FileNode.FullPath == Filename))
+						{
+							NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_Blank_Id);
+						}
+					}
+				}
+			}
+			else  // solution
+			{
+				GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> selectedNodes, out List<string> selectedFiles);
+
+				Debug.Assert(selectedNodes.Count == selectedFiles.Count, "selectedNodes and selectedFiles not the same count");
+
+				for (int index = 0; index < selectedNodes.Count; index++)
+				{
+					if (RevertFile(selectedFiles[index]))
+					{
+						UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+					}
+				}
+			}
+		}
+
+		public void UpdateGlyphOnSelectedFile(VSITEMSELECTION itemSelection, string Filename)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (itemSelection.pHier == null)  // we can't display a moniker glyph on the solution file (since it doesn't have a project)
+			{
+				return;
+			}
+
+			IVsSolution sol = (IVsSolution)GetService(typeof(SVsSolution));
+			if (sol != null)
+			{
+				IVsSccProject2 sccProject2 = itemSelection.pHier as IVsSccProject2;
+				if ((sccProject2 != null) && (itemSelection.itemid != VSConstants.VSITEMID_NIL))
+				{
+					string[] rgpszFullPaths = new string[1];
+					rgpszFullPaths[0] = Filename;
+					VsStateIcon[] rgsiGlyphs = new VsStateIcon[1];
+					uint[] rgdwSccStatus = new uint[1];
+					sccService.GetSccGlyph(1, rgpszFullPaths, rgsiGlyphs, rgdwSccStatus);
+
+					uint[] rguiAffectedNodes = new uint[1];
+					rguiAffectedNodes[0] = itemSelection.itemid;
+					sccProject2.SccGlyphChanged(1, rguiAffectedNodes, rgsiGlyphs, rgdwSccStatus);
+				}
 			}
 		}
 
 		#endregion  // Source Control Commands Execution
+
+
+		List<string> GetSelectedWorkspaceFiles()
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			// this returns a list of selected filenames from the Workspace Explorer
+
+			List<string> selectedFiles = new List<string>();
+
+			EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+			if (dte2 != null)
+			{
+				EnvDTE.UIHierarchy uih = dte2.ToolWindows.SolutionExplorer;
+				System.Array selectedItems = (System.Array)uih.SelectedItems;
+
+				foreach (UIHierarchyItem selItem in selectedItems)
+				{
+					ProjectItem projItem = selItem.Object as ProjectItem;
+					if (projItem != null)
+					{
+						string Filename = projItem.Properties.Item("FullPath").Value.ToString();
+						selectedFiles.Add(Filename);
+					}
+				}
+			}
+
+			return selectedFiles;
+		}
+
+		void GetSelectedSolutionNodesAndFiles(out List<VSITEMSELECTION> selectedNodes, out List<string> selectedFiles)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			// this returns a list of selected nodes and their filenames from the Solution Explorer
+
+			selectedNodes = new List<VSITEMSELECTION>();
+			selectedFiles = new List<string>();
+
+			IntPtr hierarchyPointer = IntPtr.Zero;
+			IntPtr selectionContainerPointer = IntPtr.Zero;
+
+			try
+			{
+				var monitorSelection = (IVsMonitorSelection)Package.GetGlobalService(typeof(SVsShellMonitorSelection));
+
+				monitorSelection.GetCurrentSelection(out hierarchyPointer, out uint itemId, out IVsMultiItemSelect multiItemSelect, out selectionContainerPointer);
+
+				if (itemId != VSConstants.VSITEMID_SELECTION)  // if a single node is selected...
+				{
+					IVsHierarchy selectedHierarchy = Marshal.GetTypedObjectForIUnknown(hierarchyPointer, typeof(IVsHierarchy)) as IVsHierarchy;
+
+					if (selectedHierarchy == null)  // if the solution...
+					{
+						VSITEMSELECTION selectedItem;
+						selectedItem.pHier = selectedHierarchy;
+						selectedItem.itemid = itemId;
+						selectedNodes.Add(selectedItem);
+					}
+					else  // otherwise check if project or file...
+					{
+						selectedHierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ExtObject, out object extObject);
+						Project project = extObject as Project;
+
+						if (project != null)  // if this item is a project...
+						{
+							VSITEMSELECTION selectedItem;
+							selectedItem.pHier = selectedHierarchy;
+							selectedItem.itemid = itemId;
+							selectedNodes.Add(selectedItem);
+						}
+						else  // otherwise, check if this is a physical file
+						{
+							selectedHierarchy.GetGuidProperty(itemId, (int)__VSHPROPID.VSHPROPID_TypeGuid, out Guid typeGuid);
+							if (typeGuid == vsProjectItemKindPhysicalFile)
+							{
+								VSITEMSELECTION selectedItem;
+								selectedItem.pHier = selectedHierarchy;
+								selectedItem.itemid = itemId;
+								selectedNodes.Add(selectedItem);
+							}
+						}
+					}
+				}
+				else if (multiItemSelect != null)
+				{
+					multiItemSelect.GetSelectionInfo(out uint numItems, out int isSingleHierarchyInt);
+
+					bool bIsSingleHierarchy = isSingleHierarchyInt == 0 ? false : true;
+
+					if (numItems > 0)
+					{
+						VSITEMSELECTION[] vsItemSelections = new VSITEMSELECTION[numItems];
+						multiItemSelect.GetSelectedItems(0, numItems, vsItemSelections);
+
+						try
+						{
+							foreach (VSITEMSELECTION vsItemSelection in vsItemSelections)
+							{
+								if (vsItemSelection.pHier == null)  // if the solution...
+								{
+									VSITEMSELECTION selectedItem;
+									selectedItem.pHier = vsItemSelection.pHier;
+									selectedItem.itemid = vsItemSelection.itemid;
+									selectedNodes.Add(selectedItem);
+								}
+								else  // otherwise check if project or file...
+								{
+									vsItemSelection.pHier.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ExtObject, out object extObject);
+									Project project = extObject as Project;
+
+									if (project != null)  // if this item is a project...
+									{
+										VSITEMSELECTION selectedItem;
+										selectedItem.pHier = vsItemSelection.pHier;
+										selectedItem.itemid = vsItemSelection.itemid;
+										selectedNodes.Add(selectedItem);
+									}
+									else  // otherwise, check if this is a physical file
+									{
+										vsItemSelection.pHier.GetGuidProperty(vsItemSelection.itemid, (int)__VSHPROPID.VSHPROPID_TypeGuid, out Guid typeGuid);
+										if (typeGuid == vsProjectItemKindPhysicalFile)
+										{
+											selectedNodes.Add(vsItemSelection);
+										}
+									}
+								}
+							}
+						}
+						catch
+						{
+						}
+					}
+				}
+			}
+			finally
+			{
+				if (hierarchyPointer != IntPtr.Zero)
+				{
+					Marshal.Release(hierarchyPointer);
+				}
+
+				if (selectionContainerPointer != IntPtr.Zero)
+				{
+					Marshal.Release(selectionContainerPointer);	
+				}
+			}
+
+			try
+			{
+				foreach (VSITEMSELECTION selectedNode in selectedNodes)
+				{
+					if (selectedNode.pHier == null)  // if this is the solution...
+					{
+						selectedFiles.Add(GetSolutionFileName());
+					}
+					else  // otherwise, get the filename from the project
+					{
+						IVsProject project = selectedNode.pHier as IVsProject;
+						if (project != null)
+						{
+							project.GetMkDocument(selectedNode.itemid, out string Filename);
+
+							if ((Filename != null) && (Filename != ""))
+							{
+								selectedFiles.Add(Filename);
+							}
+						}
+					}
+				}
+			}
+			catch
+			{
+			}
+		}
 
 
 		public void SetP4SettingsForSolution(string solutionDirectory)
@@ -849,7 +1389,8 @@ namespace P4SimpleScc
 					P4Command p4 = new P4Command();
 					p4.RunP4Set(solutionDirectory, out P4Port, out P4User, out P4Client, out string verbose);
 
-					if (bVerboseOutput)  // we don't need to worry about stderr output here since "p4 set" should never fail to run (as long as P4V is installed)
+					// we don't need to worry about stderr output here since "p4 set" should never fail to run (as long as P4V is installed)
+					if (bVerboseOutput && (verbose != null) && (verbose != ""))
 					{
 						if (!verbose.EndsWith("\n"))
 						{
@@ -899,9 +1440,9 @@ namespace P4SimpleScc
 			{
 				P4Command p4 = new P4Command();
 
-				p4.ServerConnect(out string stdout, out string stderr, out string verbose, out bIsNotAllWrite);
+				p4.ServerConnect(out string stdout, out string stderr, out string verbose, out bIsNoAllWrite);
 
-				if (bVerboseOutput)
+				if (bVerboseOutput && (verbose != null) && (verbose != ""))
 				{
 					if (!verbose.EndsWith("\n"))
 					{
@@ -932,7 +1473,7 @@ namespace P4SimpleScc
 
 			if (SolutionConfigType != 0)  // not disabled?
 			{
-				if (bIsNotAllWrite)
+				if (bUseNoAllWriteOptimization && !bIsNoAllWrite)
 				{
 					FileInfo info = new FileInfo(Filename);
 
@@ -946,7 +1487,7 @@ namespace P4SimpleScc
 
 				status = p4.IsCheckedOut(Filename, out string stdout, out stderr, out string verbose);  // ignore stderr here since failure will be treated as if file is not checked out
 
-				if (bVerboseOutput)
+				if (bVerboseOutput && (verbose != null) && (verbose != ""))
 				{
 					if (!verbose.EndsWith("\n"))
 					{
@@ -963,13 +1504,13 @@ namespace P4SimpleScc
 		{
 			if (SolutionConfigType != 0)  // not disabled?
 			{
-				if (File.Exists(Filename))  // if the file doesn't exist, then it can't be in source control (i.e. brand new file)
+				if (File.Exists(Filename))  // if the file doesn't exist, then it can't be in source control (i.e. brand new file not yet saved)
 				{
 					P4Command p4 = new P4Command();
 
 					P4Command.CheckOutStatus status = p4.CheckOutFile(Filename, out string stdout, out string stderr, out string verbose);
 
-					if (bVerboseOutput)
+					if (bVerboseOutput && (verbose != null) && (verbose != ""))
 					{
 						if (!verbose.EndsWith("\n"))
 						{
@@ -978,7 +1519,7 @@ namespace P4SimpleScc
 						P4SimpleSccQueueOutput(verbose);
 					}
 
-					// if file already checked out, or file not in client's root (outside workspace), or file is not in source control (brand new file, not yet added to source control)
+					// if the file is already checked out, or file not in client's root (outside workspace), or file is not in source control (brand new file, not yet added to source control)
 					if (status == P4Command.CheckOutStatus.FileAlreadyCheckedOut || status == P4Command.CheckOutStatus.FileNotInSourceControl)
 					{
 						return true;
@@ -999,6 +1540,69 @@ namespace P4SimpleScc
 					{
 						string message = String.Format("Check out of '{0}' successful.\n", Filename);
 						P4SimpleSccQueueOutput(message);
+
+						FilesCheckedOut.Add(Filename);
+
+						return true;
+					}
+				}
+			}
+
+			return true;  // return good status if P4SimpleScc is disabled for this solution
+		}
+
+		public static bool RevertFile(string Filename)
+		{
+			MsVsShell.ThreadHelper.ThrowIfNotOnUIThread();
+
+			if (SolutionConfigType != 0)  // not disabled?
+			{
+				if (File.Exists(Filename))  // if the file doesn't exist, then it can't be in source control (i.e. brand new file not yet saved)
+				{
+					IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
+
+					string revert_message = String.Format("Do you want to revert: '{0}'?", Filename);
+					if (!VsShellUtilities.PromptYesNo(revert_message, "Warning", OLEMSGICON.OLEMSGICON_WARNING, uiShell))
+					{
+						return true;
+					}
+
+					P4Command p4 = new P4Command();
+
+					P4Command.CheckOutStatus status = p4.RevertFile(Filename, out string stdout, out string stderr, out string verbose);
+
+					if (bVerboseOutput && (verbose != null) && (verbose != ""))
+					{
+						if (!verbose.EndsWith("\n"))
+						{
+							verbose += "\n";
+						}
+						P4SimpleSccQueueOutput(verbose);
+					}
+
+					// if the file is not checked out, or file not in client's root (outside workspace), or file is not in source control (brand new file, not yet added to source control)
+					if (status == P4Command.CheckOutStatus.FileNotCheckedOut || status == P4Command.CheckOutStatus.FileNotInSourceControl)
+					{
+						return true;
+					}
+
+					if (stderr != null && stderr.Length > 0)
+					{
+						string message = String.Format("Revert of '{0}' failed.\n", Filename);
+						P4SimpleSccQueueOutput(message);
+						P4SimpleSccQueueOutput(stderr);
+
+						string dialog_message = message + stderr;
+						MsVsShell.VsShellUtilities.ShowMessageBox(package, dialog_message, "P4SimpleScc Error", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+
+						return false;
+					}
+					else
+					{
+						string message = String.Format("Revert of '{0}' successful.\n", Filename);
+						P4SimpleSccQueueOutput(message);
+
+						FilesCheckedOut.Remove(Filename);
 
 						return true;
 					}

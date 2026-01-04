@@ -19,6 +19,7 @@ namespace ClassLibrary
 		private string solutionDirectory = "";
 
 		public int SolutionConfigType = 0;
+		public bool bUseNoAllWriteOptimization = false;
 		public bool bCheckOutOnEdit = true;
 		public bool bPromptForCheckout = false;
 		public bool bVerboseOutput = false;
@@ -36,7 +37,7 @@ namespace ClassLibrary
 		public delegate void VerboseOutputDelegate(string message);
 		private VerboseOutputDelegate VerboseOutput = null;
 
-		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInVerboseOutput, bool bInOutputEnabled, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
+		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInUseNoAllWriteOptimization, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInVerboseOutput, bool bInOutputEnabled, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
 		{
 			bWindowInitComplete = false;  // we aren't done initializing the window yet
 
@@ -46,6 +47,7 @@ namespace ClassLibrary
 
 			solutionDirectory = InSolutionDirectory;
 			SolutionConfigType = InSolutionConfigType;
+			bUseNoAllWriteOptimization = bInUseNoAllWriteOptimization;
 			bCheckOutOnEdit = bInCheckOutOnEdit;
 			bPromptForCheckout = bInPromptForCheckout;
 			bVerboseOutput = bInVerboseOutput;
@@ -80,6 +82,8 @@ namespace ClassLibrary
 			{
 				radioButtonOnSave.Checked = true;
 			}
+
+			checkBoxAllWriteOptimization.Checked = bUseNoAllWriteOptimization;
 
 			checkBoxPromptForCheckout.Checked = bPromptForCheckout;
 			checkBoxVerboseOutput.Checked = bVerboseOutput;
@@ -185,6 +189,11 @@ namespace ClassLibrary
 				ManualP4User = textBoxP4User.Text;
 				ManualP4Client = textBoxP4Client.Text;
 			}
+		}
+
+		private void checkBoxAllWriteOptimization_CheckedChanged(object sender, EventArgs e)
+		{
+			bUseNoAllWriteOptimization = checkBoxAllWriteOptimization.Checked;
 		}
 
 		private void radioButtonOnModify_CheckedChanged(object sender, EventArgs e)

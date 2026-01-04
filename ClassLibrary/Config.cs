@@ -26,6 +26,7 @@ namespace ClassLibrary
 			SolutionConfigDialogP4Client,  // string
 			SolutionConfigVerboseOutput,  // bool
 			SolutionConfigOutputEnabled,  // bool
+			SolutionConfigAllWriteOptimization,  // bool
 		};
 
 		private static Dictionary<string, string> ConfigDictionary = new Dictionary<string,string>();

@@ -26,9 +26,9 @@ namespace P4SimpleScc
 		// Other guids for menus and commands
 		public static readonly Guid guidSccProviderCmdSet = new Guid("{B205A1B6-9463-474A-807D-17F40BCFBB17}");
 
-        public static readonly Guid GuidOpenFolderExtensibilityPackageCmdSet = new Guid("e37cc989-b956-4a50-9515-b0395b288e4a");
+		public static readonly Guid GuidOpenFolderExtensibilityPackageCmdSet = new Guid("e37cc989-b956-4a50-9515-b0395b288e4a");
 
-        // Guid to associate file action factories.
-        public const string SourceFileContextType = "2C4D13FF-FEA9-4AEC-A48E-17FD9D70E594";
+		// Guid to associate file action factories.
+		public const string SourceFileContextType = "2C4D13FF-FEA9-4AEC-A48E-17FD9D70E594";
 	};
 }
