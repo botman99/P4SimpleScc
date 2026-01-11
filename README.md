@@ -26,7 +26,9 @@ You can also select whether you want to check out files when they are modified o
 
 There is an option to prompt you with a dialog to verify that it is okay to check out each file before doing so (otherwise, the file will automatically be checked out upon modify/save).
 
-There is also an option to enable or disable the 'P4SimpleScc' Output pane in the Output Window.  By default, this output is disabled.  If you enable output, you can also enable 'Verbose Output' which outputs the response of all P4 commands that are issued to the server by the P4SimpleScc extension.  The 'Verbose Output' is normally not needed unless you are trying to debug why some operation in P4SimpleScc is failing.
+There is an option to display a 'checked out' icon on the left of files in the Solution Explorer when those files are checked out of Perforce.  This is disabled by default.  Having this option checked can cause performance issues if you have lots of files checked out of Perforce when opening the Solution (or Workspace).  P4SimpleScc will warn you if you have more than 100 files checked out when loading a solution and will automatically NOT display the 'checked out' icon for those file (to prevent Visual Studio from hanging for a long period of time).
+
+There is an option to enable or disable the 'P4SimpleScc' Output pane in the Output Window.  By default, this output is disabled.  If you enable output, you can also enable 'Verbose Output' which outputs the response to all P4 commands that are issued to the server by the P4SimpleScc extension.  The 'Verbose Output' is normally not needed unless you are trying to debug why some operation in P4SimpleScc is failing.
 
 If you have 'Output Enabled' checked in the Solution Configuration, when the P4SimpleScc provider is enabled, you can see status messages from it by opening the Output window ("View -> Output" from the main menu, or Ctrl-Alt-O).  Then select 'P4SimpleScc' in the 'Show output from:' drop down.
 
@@ -53,6 +55,10 @@ When files are checked out, you should see a little red "checked out" icon to th
 ![CheckedOutLightTheme](https://raw.githubusercontent.com/botman99/P4SimpleScc/master/img/CheckedOutLightTheme.png)
 
 This 'checked out' moniker to the left of the file will not be displayed on the solution itself (even if the solution file is checked out) since I haven't found a way to get Visual Studio to display the icon on the solution itself.  The 'checked out' moniker will be displayed on any projects within the solution that you have checked out.  You can still check out and revert the solution, it just won't show the 'checked out' moniker.
+
+**If you need to reset the P4SimpleScc settings to the default settings:**
+
+Use Windows Explorer to look in the folder where the Solution file is located.  There will be a hidden '.vs' folder where the solution .sln file is located.  In that hidden '.vs' folder, you will find a folder with the same name as the solution file.  Go into that folder and you should see either a 'v16', 'v17', or 'v18' folder (depending on whether you are using Visual Studio 2019, 2022, or 2026, respectively).  Inside that folder, you should find a .suo file.  P4SimpleScc saves its settings in that .suo file.  If you delete that .suo file and start Visual Studio and load your solution, the settings will be reset back to default.
 
 **NOTE:** If you have the P4VS extension installed, you may need to disable it (you don't need to uninstall, just disable) since the P4VS extension seems to want to make itself the active source control provider even if another provider was active or is controlling that solution.
 

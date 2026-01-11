@@ -27,6 +27,7 @@ namespace ClassLibrary
 			SolutionConfigVerboseOutput,  // bool
 			SolutionConfigOutputEnabled,  // bool
 			SolutionConfigAllWriteOptimization,  // bool
+			SolutionConfigDisplayCheckedOutIcon,  // bool
 		};
 
 		private static Dictionary<string, string> ConfigDictionary = new Dictionary<string,string>();

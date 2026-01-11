@@ -22,6 +22,7 @@ namespace ClassLibrary
 		public bool bUseNoAllWriteOptimization = false;
 		public bool bCheckOutOnEdit = true;
 		public bool bPromptForCheckout = false;
+		public bool bDisplayCheckedOutIcon = false;
 		public bool bVerboseOutput = false;
 		public bool bOutputEnabled = false;
 
@@ -37,7 +38,7 @@ namespace ClassLibrary
 		public delegate void VerboseOutputDelegate(string message);
 		private VerboseOutputDelegate VerboseOutput = null;
 
-		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInUseNoAllWriteOptimization, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInVerboseOutput, bool bInOutputEnabled, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
+		public SolutionConfigForm(int InPosX, int InPosY, string InSolutionDirectory, int InSolutionConfigType, bool bInUseNoAllWriteOptimization, bool bInCheckOutOnEdit, bool bInPromptForCheckout, bool bInDisplayCheckedOutIcon, bool bInVerboseOutput, bool bInOutputEnabled, string InP4Port, string InP4User, string InP4Client, VerboseOutputDelegate InVerboseOutput)
 		{
 			bWindowInitComplete = false;  // we aren't done initializing the window yet
 
@@ -50,6 +51,7 @@ namespace ClassLibrary
 			bUseNoAllWriteOptimization = bInUseNoAllWriteOptimization;
 			bCheckOutOnEdit = bInCheckOutOnEdit;
 			bPromptForCheckout = bInPromptForCheckout;
+			bDisplayCheckedOutIcon = bInDisplayCheckedOutIcon;
 			bVerboseOutput = bInVerboseOutput;
 			bOutputEnabled = bInOutputEnabled;
 
@@ -86,6 +88,7 @@ namespace ClassLibrary
 			checkBoxAllWriteOptimization.Checked = bUseNoAllWriteOptimization;
 
 			checkBoxPromptForCheckout.Checked = bPromptForCheckout;
+			checkBoxDisplayCheckedOutIcon.Checked = bDisplayCheckedOutIcon;
 			checkBoxVerboseOutput.Checked = bVerboseOutput;
 			checkBoxOutputEnabled.Checked = bOutputEnabled;
 
@@ -225,6 +228,11 @@ namespace ClassLibrary
 		private void checkBoxPromptForCheckout_CheckedChanged(object sender, EventArgs e)
 		{
 			bPromptForCheckout = checkBoxPromptForCheckout.Checked;
+		}
+
+		private void checkBoxDisplayIcon_CheckedChanged(object sender, EventArgs e)
+		{
+			bDisplayCheckedOutIcon = checkBoxDisplayCheckedOutIcon.Checked;
 		}
 
 		private void checkBoxOutputEnabled_CheckedChanged(object sender, EventArgs e)

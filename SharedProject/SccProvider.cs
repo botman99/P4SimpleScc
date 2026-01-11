@@ -107,12 +107,13 @@ namespace P4SimpleScc
 
 		// P4SimpleScc solution configuration settings...
 		public static int SolutionConfigType = 0;  // 0 = disabled, 1 = automatic, 2 = manual settings
-		public static bool bUseNoAllWriteOptimization = false;
-		public bool bCheckOutOnEdit = true;
-		public bool bPromptForCheckout = false;
 		public string P4Port = "";
 		public string P4User = "";
 		public string P4Client = "";
+		public static bool bUseNoAllWriteOptimization = false;
+		public static bool bCheckOutOnEdit = true;
+		public static bool bPromptForCheckout = false;
+		public static bool bDisplayCheckedOutIcon = false;
 		public static bool bVerboseOutput = false;
 		public static bool bOutputEnabled = false;
 
@@ -493,14 +494,15 @@ namespace P4SimpleScc
 				{
 					Config.Load(config_string);
 
+					// NOTE: We don't initialize P4Port, P4User or P4Client here as these are handled in SetP4SettingsForSolution based on SolutionConfigType setting
+
 					Config.Get(Config.KEY.SolutionConfigType, ref SolutionConfigType);
 
 					Config.Get(Config.KEY.SolutionConfigAllWriteOptimization, ref bUseNoAllWriteOptimization);
 
 					Config.Get(Config.KEY.SolutionConfigCheckOutOnEdit, ref bCheckOutOnEdit);
 					Config.Get(Config.KEY.SolutionConfigPromptForCheckout, ref bPromptForCheckout);
-
-					// NOTE: We don't initialize P4Port, P4User or P4Client here as these are handled in SetP4SettingsForSolution based on SolutionConfigType setting
+					Config.Get(Config.KEY.SolutionConfigDisplayCheckedOutIcon, ref bDisplayCheckedOutIcon);
 
 					Config.Get(Config.KEY.SolutionConfigVerboseOutput, ref bVerboseOutput);
 					Config.Get(Config.KEY.SolutionConfigOutputEnabled, ref bOutputEnabled);
@@ -630,95 +632,101 @@ namespace P4SimpleScc
 				}
 			}
 
-			if (SolutionConfigType != 0)
+			if ((SolutionConfigType != 0) && (bDisplayCheckedOutIcon))
 			{
 				bShouldSkipGetSccGlyphCheckoutStatus = true;
 				FilesCheckedOut = new HashSet<string>();
 
-				p4.GetCheckedOutFiles(out FilesCheckedOut);
-
-				if (FilesCheckedOut.Count > 0)
+				if (p4.GetCheckedOutFiles(out FilesCheckedOut))
 				{
-					// This code is needed if you launch Visual Studio by double clicking on a solution file.
-					// This SccProvider is slow to load and the GetSccGlyph in SccProviderServices will not be loaded
-					// by the time the solution explorer displays files.  The FilesCheckedOut will be populated
-					// several seconds after the solution is fully loaded and so we need to update the glyph of
-					// each file that is already checked out.  If you start Visual Studio and the load a project,
-					// the SccProvider will be loaded and the 'FilesCheckedOut' list will be populated before
-					// GetSccGlyph in SccProviderServices gets a chance to run (and that code will automatically
-					// update the glyph on each of the checked out files.
-
-					IVsSolution sol = (IVsSolution)GetService(typeof(SVsSolution));
-					if (sol != null)
+					if (FilesCheckedOut.Count > 0)
 					{
-						List<string> ProjectFilenames = new List<string>();
-						List<IVsHierarchy> ProjectHierarchy = new List<IVsHierarchy>();
+						// This code is needed if you launch Visual Studio by double clicking on a solution file.
+						// This SccProvider is slow to load and the GetSccGlyph in SccProviderServices will not be loaded
+						// by the time the solution explorer displays files.  The FilesCheckedOut will be populated
+						// several seconds after the solution is fully loaded and so we need to update the glyph of
+						// each file that is already checked out.  If you start Visual Studio and the load a project,
+						// the SccProvider will be loaded and the 'FilesCheckedOut' list will be populated before
+						// GetSccGlyph in SccProviderServices gets a chance to run (and that code will automatically
+						// update the glyph on each of the checked out files.
 
-						// gather the list of projects in this solution up front so we don't have to iterate it for each project file below
-						Guid nullGuid = Guid.Empty;
-						int hr = sol.GetProjectEnum((uint)(__VSENUMPROJFLAGS.EPF_LOADEDINSOLUTION), ref nullGuid, out IEnumHierarchies enumHierarchies);
-						if (hr == VSConstants.S_OK)
+						IVsSolution sol = (IVsSolution)GetService(typeof(SVsSolution));
+						if (sol != null)
 						{
-							IVsHierarchy[] hierarchy = new IVsHierarchy[1];
-							while (enumHierarchies.Next(1, hierarchy, out uint fetched) == VSConstants.S_OK && fetched == 1)
-							{
-								if (hierarchy[0] != null)
-								{
-									hierarchy[0].GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ExtObject, out object obj);
-									Project project = obj as Project;
+							List<string> ProjectFilenames = new List<string>();
+							List<IVsHierarchy> ProjectHierarchy = new List<IVsHierarchy>();
 
-									if ((project != null) && (project.FullName != null)&& (project.FullName != ""))
-									{
-										ProjectFilenames.Add(project.FullName);
-										ProjectHierarchy.Add(hierarchy[0]);
-									}
-								}
-							}
-						}
-
-						EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
-						if (dte2 != null)
-						{
-							foreach (string Filename in FilesCheckedOut)
+							// gather the list of projects in this solution up front so we don't have to iterate it for each project file below
+							Guid nullGuid = Guid.Empty;
+							int hr = sol.GetProjectEnum((uint)(__VSENUMPROJFLAGS.EPF_LOADEDINSOLUTION), ref nullGuid, out IEnumHierarchies enumHierarchies);
+							if (hr == VSConstants.S_OK)
 							{
-								ProjectItem item = dte2.Solution.FindProjectItem(Filename);
-								if (item == null)  // if there is no project item, then this Filename is a project filename
+								IVsHierarchy[] hierarchy = new IVsHierarchy[1];
+								while (enumHierarchies.Next(1, hierarchy, out uint fetched) == VSConstants.S_OK && fetched == 1)
 								{
-									for (int index = 0; index < ProjectFilenames.Count; ++index)
+									if (hierarchy[0] != null)
 									{
-										if (ProjectFilenames[index] == Filename)
+										hierarchy[0].GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ExtObject, out object obj);
+										Project project = obj as Project;
+
+										if ((project != null) && (project.FullName != null)&& (project.FullName != ""))
 										{
-											ProjectHierarchy[index].ParseCanonicalName(Filename, out uint itemId);
-
-											VSITEMSELECTION itemSelection = new VSITEMSELECTION();
-											itemSelection.pHier = ProjectHierarchy[index];
-											itemSelection.itemid = itemId;
-
-											UpdateGlyphOnSelectedFile(itemSelection, Filename);
-
-											break;			
+											ProjectFilenames.Add(project.FullName);
+											ProjectHierarchy.Add(hierarchy[0]);
 										}
 									}
 								}
-								else
+							}
+
+							EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+							if (dte2 != null)
+							{
+								foreach (string Filename in FilesCheckedOut)
 								{
-									Project project = item.ContainingProject;
-
-									sol.GetProjectOfUniqueName(project.UniqueName, out IVsHierarchy projectHierarchy);
-									if (projectHierarchy != null)
+									ProjectItem item = dte2.Solution.FindProjectItem(Filename);
+									if (item == null)  // if there is no project item, then this Filename is a project filename
 									{
-										projectHierarchy.ParseCanonicalName(Filename, out uint itemId);
+										for (int index = 0; index < ProjectFilenames.Count; ++index)
+										{
+											if (ProjectFilenames[index] == Filename)
+											{
+												ProjectHierarchy[index].ParseCanonicalName(Filename, out uint itemId);
 
-										VSITEMSELECTION itemSelection = new VSITEMSELECTION();
-										itemSelection.pHier = projectHierarchy;
-										itemSelection.itemid = itemId;
+												VSITEMSELECTION itemSelection = new VSITEMSELECTION();
+												itemSelection.pHier = ProjectHierarchy[index];
+												itemSelection.itemid = itemId;
 
-										UpdateGlyphOnSelectedFile(itemSelection, Filename);
+												UpdateGlyphOnSelectedFile(itemSelection, Filename);
+
+												break;			
+											}
+										}
+									}
+									else
+									{
+										Project project = item.ContainingProject;
+
+										sol.GetProjectOfUniqueName(project.UniqueName, out IVsHierarchy projectHierarchy);
+										if (projectHierarchy != null)
+										{
+											projectHierarchy.ParseCanonicalName(Filename, out uint itemId);
+
+											VSITEMSELECTION itemSelection = new VSITEMSELECTION();
+											itemSelection.pHier = projectHierarchy;
+											itemSelection.itemid = itemId;
+
+											UpdateGlyphOnSelectedFile(itemSelection, Filename);
+										}
 									}
 								}
 							}
 						}
 					}
+				}
+				else
+				{
+					string message = "You have more than 100 files checked out of Perforce at startup.\nNot displaying 'checked out' icon on these files because this would be REALLY, REALLY, slow.";
+					Microsoft.VisualStudio.Shell.VsShellUtilities.ShowMessageBox(package, message, "P4SimpleScc Warning", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
 				}
 			}
 		}
@@ -929,7 +937,7 @@ namespace P4SimpleScc
 			int pos_y = -1;
 			Config.Get(Config.KEY.SolutionConfigDialogPosY, ref pos_y);
 
-			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bUseNoAllWriteOptimization, bCheckOutOnEdit, bPromptForCheckout, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
+			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bUseNoAllWriteOptimization, bCheckOutOnEdit, bPromptForCheckout, bDisplayCheckedOutIcon, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
 
 			System.Windows.Forms.DialogResult result = Dialog.ShowDialog();
 
@@ -948,6 +956,7 @@ namespace P4SimpleScc
 				bUseNoAllWriteOptimization = Dialog.bUseNoAllWriteOptimization;
 				bCheckOutOnEdit = Dialog.bCheckOutOnEdit;
 				bPromptForCheckout = Dialog.bPromptForCheckout;
+				bDisplayCheckedOutIcon = Dialog.bDisplayCheckedOutIcon;
 				bVerboseOutput = Dialog.bVerboseOutput;
 				bOutputEnabled = Dialog.bOutputEnabled;
 
@@ -974,16 +983,18 @@ namespace P4SimpleScc
 				}
 
 				// save all the config settings
-				Config.Set(Config.KEY.SolutionConfigType, SolutionConfigType);
-				Config.Set(Config.KEY.SolutionConfigCheckOutOnEdit, bCheckOutOnEdit);
-				Config.Set(Config.KEY.SolutionConfigPromptForCheckout, bPromptForCheckout);
 
 				// these will be blank for all configurations except 'manual settings' (SetP4SettingsForSolution will re-initialize them at runtime)
 				Config.Set(Config.KEY.SolutionConfigDialogP4Port, P4Port);
 				Config.Set(Config.KEY.SolutionConfigDialogP4User, P4User);
 				Config.Set(Config.KEY.SolutionConfigDialogP4Client, P4Client);
 
+				Config.Set(Config.KEY.SolutionConfigType, SolutionConfigType);
+				Config.Set(Config.KEY.SolutionConfigCheckOutOnEdit, bCheckOutOnEdit);
+				Config.Set(Config.KEY.SolutionConfigPromptForCheckout, bPromptForCheckout);
+
 				Config.Set(Config.KEY.SolutionConfigAllWriteOptimization, bUseNoAllWriteOptimization);
+				Config.Set(Config.KEY.SolutionConfigDisplayCheckedOutIcon, bDisplayCheckedOutIcon);
 
 				Config.Set(Config.KEY.SolutionConfigVerboseOutput, bVerboseOutput);
 				Config.Set(Config.KEY.SolutionConfigOutputEnabled, bOutputEnabled);
@@ -1011,12 +1022,15 @@ namespace P4SimpleScc
 				{
 					if (CheckOutFile(Filename))
 					{
-						foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
+						if (bDisplayCheckedOutIcon)
 						{
-							IFileNode FileNode = NodeBase as IFileNode;
-							if ((FileNode != null) && (FileNode.FullPath == Filename))
+							foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
 							{
-								NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_CheckedOutForEdit_Id);
+								IFileNode FileNode = NodeBase as IFileNode;
+								if ((FileNode != null) && (FileNode.FullPath == Filename))
+								{
+									NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_CheckedOutForEdit_Id);
+								}
 							}
 						}
 					}
@@ -1032,7 +1046,10 @@ namespace P4SimpleScc
 				{
 					if (CheckOutFile(selectedFiles[index]))
 					{
-						UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+						if (bDisplayCheckedOutIcon)
+						{
+							UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+						}
 					}
 				}
 			}
@@ -1056,12 +1073,15 @@ namespace P4SimpleScc
 
 				if (CheckOutFile(Filename))
 				{
-					foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
+					if (bDisplayCheckedOutIcon)
 					{
-						IFileNode FileNode = NodeBase as IFileNode;
-						if ((FileNode != null) && (FileNode.FullPath == Filename))
+						foreach(WorkspaceVisualNodeBase NodeBase in NodeExtender.WorkspaceVisualNodeBaseList)
 						{
-							NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_CheckedOutForEdit_Id);
+							IFileNode FileNode = NodeBase as IFileNode;
+							if ((FileNode != null) && (FileNode.FullPath == Filename))
+							{
+								NodeBase.SetStateIcon(NodeExtender.Microsoft_VisualStudio_ImageCatalog_Guid, NodeExtender.Moniker_CheckedOutForEdit_Id);
+							}
 						}
 					}
 				}
@@ -1076,7 +1096,10 @@ namespace P4SimpleScc
 				{
 					if (CheckOutFile(selectedFiles[index]))
 					{
-						UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+						if (bDisplayCheckedOutIcon)
+						{
+							UpdateGlyphOnSelectedFile(selectedNodes[index], selectedFiles[index]);
+						}
 					}
 				}
 			}

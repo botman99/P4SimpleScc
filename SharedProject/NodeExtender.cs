@@ -66,7 +66,7 @@ namespace P4SimpleScc
 
 		private static void OnLoadTimerEvent(Object source, ElapsedEventArgs e)
 		{
-			if (SccProvider.SolutionConfigType != 0)
+			if ((SccProvider.SolutionConfigType != 0) && (SccProvider.bDisplayCheckedOutIcon))
 			{
 				foreach(WorkspaceVisualNodeBase NodeBase in WorkspaceVisualNodeBaseList)
 				{
@@ -92,7 +92,7 @@ namespace P4SimpleScc
 
 		private static void OnRefreshTimerEvent(Object source, ElapsedEventArgs e)
 		{
-			if (SccProvider.SolutionConfigType != 0)
+			if ((SccProvider.SolutionConfigType != 0) && (SccProvider.bDisplayCheckedOutIcon))
 			{
 				foreach(WorkspaceVisualNodeBase NodeBase in WorkspaceVisualNodeBaseList)
 				{
@@ -127,7 +127,10 @@ namespace P4SimpleScc
 						{
 							if (SccProvider.CheckOutFile(FileNode.FullPath))
 							{
-								selection[0].SetStateIcon(Microsoft_VisualStudio_ImageCatalog_Guid, Moniker_CheckedOutForEdit_Id);
+								if (SccProvider.bDisplayCheckedOutIcon)
+								{
+									selection[0].SetStateIcon(Microsoft_VisualStudio_ImageCatalog_Guid, Moniker_CheckedOutForEdit_Id);
+								}
 							}
 						}
 					}
@@ -138,6 +141,7 @@ namespace P4SimpleScc
 						{
 							if (SccProvider.RevertFile(FileNode.FullPath))
 							{
+								// we always set the state icon to blank in the case where a file is checked out, the setting is changed, and then the file is reverted
 								selection[0].SetStateIcon(Microsoft_VisualStudio_ImageCatalog_Guid, Moniker_Blank_Id);
 							}
 						}

@@ -53,6 +53,7 @@ namespace ClassLibrary
 			this.checkBoxOutputEnabled = new System.Windows.Forms.CheckBox();
 			this.checkBoxAllWriteOptimization = new System.Windows.Forms.CheckBox();
 			this.label8 = new System.Windows.Forms.Label();
+			this.checkBoxDisplayCheckedOutIcon = new System.Windows.Forms.CheckBox();
 			this.panel1.SuspendLayout();
 			this.panel2.SuspendLayout();
 			this.SuspendLayout();
@@ -75,7 +76,7 @@ namespace ClassLibrary
 			this.panel1.Controls.Add(this.radioButtonDisabled);
 			this.panel1.Location = new System.Drawing.Point(12, 12);
 			this.panel1.Name = "panel1";
-			this.panel1.Size = new System.Drawing.Size(506, 261);
+			this.panel1.Size = new System.Drawing.Size(516, 261);
 			this.panel1.TabIndex = 0;
 			// 
 			// textBoxP4Client
@@ -104,7 +105,6 @@ namespace ClassLibrary
 			// 
 			// label7
 			// 
-			this.label7.AutoSize = true;
 			this.label7.Location = new System.Drawing.Point(9, 226);
 			this.label7.Name = "label7";
 			this.label7.Size = new System.Drawing.Size(61, 13);
@@ -113,7 +113,6 @@ namespace ClassLibrary
 			// 
 			// label6
 			// 
-			this.label6.AutoSize = true;
 			this.label6.Location = new System.Drawing.Point(9, 200);
 			this.label6.Name = "label6";
 			this.label6.Size = new System.Drawing.Size(53, 13);
@@ -122,7 +121,6 @@ namespace ClassLibrary
 			// 
 			// label5
 			// 
-			this.label5.AutoSize = true;
 			this.label5.Location = new System.Drawing.Point(9, 174);
 			this.label5.Name = "label5";
 			this.label5.Size = new System.Drawing.Size(53, 13);
@@ -131,7 +129,6 @@ namespace ClassLibrary
 			// 
 			// label4
 			// 
-			this.label4.AutoSize = true;
 			this.label4.Location = new System.Drawing.Point(9, 140);
 			this.label4.Name = "label4";
 			this.label4.Size = new System.Drawing.Size(306, 13);
@@ -140,7 +137,6 @@ namespace ClassLibrary
 			// 
 			// label3
 			// 
-			this.label3.AutoSize = true;
 			this.label3.Location = new System.Drawing.Point(9, 94);
 			this.label3.Name = "label3";
 			this.label3.Size = new System.Drawing.Size(382, 13);
@@ -150,7 +146,6 @@ namespace ClassLibrary
 			// 
 			// label2
 			// 
-			this.label2.AutoSize = true;
 			this.label2.Location = new System.Drawing.Point(9, 78);
 			this.label2.Name = "label2";
 			this.label2.Size = new System.Drawing.Size(394, 13);
@@ -159,7 +154,6 @@ namespace ClassLibrary
 			// 
 			// label1
 			// 
-			this.label1.AutoSize = true;
 			this.label1.Location = new System.Drawing.Point(9, 32);
 			this.label1.Name = "label1";
 			this.label1.Size = new System.Drawing.Size(184, 13);
@@ -168,7 +162,6 @@ namespace ClassLibrary
 			// 
 			// radioButtonManual
 			// 
-			this.radioButtonManual.AutoSize = true;
 			this.radioButtonManual.Location = new System.Drawing.Point(12, 120);
 			this.radioButtonManual.Name = "radioButtonManual";
 			this.radioButtonManual.Size = new System.Drawing.Size(101, 17);
@@ -180,7 +173,6 @@ namespace ClassLibrary
 			// 
 			// radioButtonAutomatic
 			// 
-			this.radioButtonAutomatic.AutoSize = true;
 			this.radioButtonAutomatic.Location = new System.Drawing.Point(12, 58);
 			this.radioButtonAutomatic.Name = "radioButtonAutomatic";
 			this.radioButtonAutomatic.Size = new System.Drawing.Size(72, 17);
@@ -192,7 +184,6 @@ namespace ClassLibrary
 			// 
 			// radioButtonDisabled
 			// 
-			this.radioButtonDisabled.AutoSize = true;
 			this.radioButtonDisabled.Location = new System.Drawing.Point(12, 12);
 			this.radioButtonDisabled.Name = "radioButtonDisabled";
 			this.radioButtonDisabled.Size = new System.Drawing.Size(66, 17);
@@ -207,14 +198,13 @@ namespace ClassLibrary
 			this.panel2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
 			this.panel2.Controls.Add(this.radioButtonOnSave);
 			this.panel2.Controls.Add(this.radioButtonOnModify);
-			this.panel2.Location = new System.Drawing.Point(12, 347);
+			this.panel2.Location = new System.Drawing.Point(12, 339);
 			this.panel2.Name = "panel2";
-			this.panel2.Size = new System.Drawing.Size(506, 66);
+			this.panel2.Size = new System.Drawing.Size(516, 66);
 			this.panel2.TabIndex = 16;
 			// 
 			// radioButtonOnSave
 			// 
-			this.radioButtonOnSave.AutoSize = true;
 			this.radioButtonOnSave.Location = new System.Drawing.Point(12, 35);
 			this.radioButtonOnSave.Name = "radioButtonOnSave";
 			this.radioButtonOnSave.Size = new System.Drawing.Size(136, 17);
@@ -226,7 +216,6 @@ namespace ClassLibrary
 			// 
 			// radioButtonOnModify
 			// 
-			this.radioButtonOnModify.AutoSize = true;
 			this.radioButtonOnModify.Location = new System.Drawing.Point(12, 12);
 			this.radioButtonOnModify.Name = "radioButtonOnModify";
 			this.radioButtonOnModify.Size = new System.Drawing.Size(143, 17);
@@ -238,7 +227,7 @@ namespace ClassLibrary
 			// 
 			// buttonOK
 			// 
-			this.buttonOK.Location = new System.Drawing.Point(325, 481);
+			this.buttonOK.Location = new System.Drawing.Point(325, 491);
 			this.buttonOK.Name = "buttonOK";
 			this.buttonOK.Size = new System.Drawing.Size(79, 29);
 			this.buttonOK.TabIndex = 22;
@@ -248,7 +237,7 @@ namespace ClassLibrary
 			// 
 			// buttonCancel
 			// 
-			this.buttonCancel.Location = new System.Drawing.Point(421, 481);
+			this.buttonCancel.Location = new System.Drawing.Point(421, 491);
 			this.buttonCancel.Name = "buttonCancel";
 			this.buttonCancel.Size = new System.Drawing.Size(79, 29);
 			this.buttonCancel.TabIndex = 23;
@@ -258,8 +247,7 @@ namespace ClassLibrary
 			// 
 			// checkBoxPromptForCheckout
 			// 
-			this.checkBoxPromptForCheckout.AutoSize = true;
-			this.checkBoxPromptForCheckout.Location = new System.Drawing.Point(25, 428);
+			this.checkBoxPromptForCheckout.Location = new System.Drawing.Point(12, 419);
 			this.checkBoxPromptForCheckout.Name = "checkBoxPromptForCheckout";
 			this.checkBoxPromptForCheckout.Size = new System.Drawing.Size(248, 17);
 			this.checkBoxPromptForCheckout.TabIndex = 19;
@@ -269,22 +257,20 @@ namespace ClassLibrary
 			// 
 			// checkBoxVerboseOutput
 			// 
-			this.checkBoxVerboseOutput.AutoSize = true;
-			this.checkBoxVerboseOutput.Location = new System.Drawing.Point(144, 458);
+			this.checkBoxVerboseOutput.Location = new System.Drawing.Point(126, 465);
 			this.checkBoxVerboseOutput.Name = "checkBoxVerboseOutput";
 			this.checkBoxVerboseOutput.Size = new System.Drawing.Size(226, 17);
-			this.checkBoxVerboseOutput.TabIndex = 21;
+			this.checkBoxVerboseOutput.TabIndex = 22;
 			this.checkBoxVerboseOutput.Text = "Verbose Output ( for debugging purposes )";
 			this.checkBoxVerboseOutput.UseVisualStyleBackColor = true;
 			this.checkBoxVerboseOutput.CheckedChanged += new System.EventHandler(this.checkBoxVerboseOutput_CheckedChanged);
 			// 
 			// checkBoxOutputEnabled
 			// 
-			this.checkBoxOutputEnabled.AutoSize = true;
-			this.checkBoxOutputEnabled.Location = new System.Drawing.Point(25, 458);
+			this.checkBoxOutputEnabled.Location = new System.Drawing.Point(12, 465);
 			this.checkBoxOutputEnabled.Name = "checkBoxOutputEnabled";
 			this.checkBoxOutputEnabled.Size = new System.Drawing.Size(100, 17);
-			this.checkBoxOutputEnabled.TabIndex = 20;
+			this.checkBoxOutputEnabled.TabIndex = 21;
 			this.checkBoxOutputEnabled.Text = "Output Enabled";
 			this.checkBoxOutputEnabled.UseVisualStyleBackColor = true;
 			this.checkBoxOutputEnabled.CheckedChanged += new System.EventHandler(this.checkBoxOutputEnabled_CheckedChanged);
@@ -303,18 +289,30 @@ namespace ClassLibrary
 			// 
 			// label8
 			// 
-			this.label8.Location = new System.Drawing.Point(25, 321);
+			this.label8.Location = new System.Drawing.Point(25, 315);
 			this.label8.Name = "label8";
 			this.label8.Size = new System.Drawing.Size(493, 23);
 			this.label8.TabIndex = 15;
 			this.label8.Text = "(the above causes files that are writable and not under source control to mistake" +
     "nly display \'Revert File\')";
 			// 
+			// checkBoxDisplayCheckedOutIcon
+			// 
+			this.checkBoxDisplayCheckedOutIcon.AutoSize = true;
+			this.checkBoxDisplayCheckedOutIcon.Location = new System.Drawing.Point(12, 442);
+			this.checkBoxDisplayCheckedOutIcon.Name = "checkBoxDisplayCheckedOutIcon";
+			this.checkBoxDisplayCheckedOutIcon.Size = new System.Drawing.Size(346, 17);
+			this.checkBoxDisplayCheckedOutIcon.TabIndex = 20;
+			this.checkBoxDisplayCheckedOutIcon.Text = "Display \'checked out\' icon on files that are checked out of Perforce.";
+			this.checkBoxDisplayCheckedOutIcon.UseVisualStyleBackColor = true;
+			this.checkBoxDisplayCheckedOutIcon.CheckedChanged += new System.EventHandler(this.checkBoxDisplayIcon_CheckedChanged);
+			// 
 			// SolutionConfigForm
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(531, 523);
+			this.ClientSize = new System.Drawing.Size(541, 533);
+			this.Controls.Add(this.checkBoxDisplayCheckedOutIcon);
 			this.Controls.Add(this.label8);
 			this.Controls.Add(this.checkBoxAllWriteOptimization);
 			this.Controls.Add(this.checkBoxOutputEnabled);
@@ -334,7 +332,6 @@ namespace ClassLibrary
 			this.panel1.ResumeLayout(false);
 			this.panel1.PerformLayout();
 			this.panel2.ResumeLayout(false);
-			this.panel2.PerformLayout();
 			this.ResumeLayout(false);
 			this.PerformLayout();
 
@@ -366,5 +363,6 @@ namespace ClassLibrary
 		private System.Windows.Forms.CheckBox checkBoxOutputEnabled;
 		private System.Windows.Forms.CheckBox checkBoxAllWriteOptimization;
 		private System.Windows.Forms.Label label8;
+		private System.Windows.Forms.CheckBox checkBoxDisplayCheckedOutIcon;
 	}
 }

@@ -547,7 +547,7 @@ namespace ClassLibrary
 			return CheckOutStatus.FileReverted;
 		}
 
-		public void GetCheckedOutFiles(out HashSet<string> InFilesCheckedOutAtStart)
+		public bool GetCheckedOutFiles(out HashSet<string> InFilesCheckedOutAtStart)
 		{
 			InFilesCheckedOutAtStart = new HashSet<string>();
 
@@ -556,10 +556,16 @@ namespace ClassLibrary
 
 			if (stderr != null && stderr.Length > 0)
 			{
-				return;
+				return false;
 			}
 
 			string[] openedFiles = stdout.Split(new char[] {'\r', '\n'});
+
+			if (openedFiles.Length / 2 > 100)  // divide by 2 because every other line will be an empty newline
+			{
+				return false;
+			}
+
 			List<string> depotFiles = new List<string>();
 
 			foreach(string openedFile in openedFiles)
@@ -586,6 +592,8 @@ namespace ClassLibrary
 					}
 				}
 			}
+
+			return true;
 		}
 	}
 }

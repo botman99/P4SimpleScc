@@ -380,7 +380,7 @@ namespace P4SimpleScc
 
 			if (SccProvider.SolutionConfigType != 0)  // if not disabled...
 			{
-				if (_sccProvider.bCheckOutOnEdit)
+				if (SccProvider.bCheckOutOnEdit)
 				{
 					try
 					{
@@ -407,7 +407,7 @@ namespace P4SimpleScc
 									bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
 								}
 
-								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut && !bShouldIgnoreStatus)  // if prompt for permission to check out and file is not checked out...
+								if (SccProvider.bPromptForCheckout && !bIsCheckedOut && !bShouldIgnoreStatus)  // if prompt for permission to check out and file is not checked out...
 								{
 									IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
 
@@ -473,7 +473,7 @@ namespace P4SimpleScc
 
 			if (SccProvider.SolutionConfigType != 0)  // if not disabled...
 			{
-				if (!_sccProvider.bCheckOutOnEdit)
+				if (!SccProvider.bCheckOutOnEdit)
 				{
 					try
 					{
@@ -493,7 +493,7 @@ namespace P4SimpleScc
 									bShouldIgnoreStatus = true;  // don't prevent file from being modified (since not under workspace or not under source control)
 								}
 
-								if (_sccProvider.bPromptForCheckout && !bIsCheckedOut && !bShouldIgnoreStatus)  // if prompt for permission to check out and file is not checked out...
+								if (SccProvider.bPromptForCheckout && !bIsCheckedOut && !bShouldIgnoreStatus)  // if prompt for permission to check out and file is not checked out...
 								{
 									IVsUIShell uiShell = ServiceProvider.GlobalProvider.GetService(typeof(SVsUIShell)) as IVsUIShell;
 
@@ -641,8 +641,8 @@ namespace P4SimpleScc
 
 			// set all configuration settings back to uninitialized
 			SccProvider.SolutionConfigType = 0;
-			_sccProvider.bCheckOutOnEdit = true;
-			_sccProvider.bPromptForCheckout = false;
+			SccProvider.bCheckOutOnEdit = true;
+			SccProvider.bPromptForCheckout = false;
 
 			_sccProvider.P4Port = "";
 			_sccProvider.P4User = "";

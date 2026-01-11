@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
-    <StartArguments>/rootsuffix Exp D:\dev\core_home\UE5.sln</StartArguments>
+    <StartArguments>/rootsuffix Exp</StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
-    <StartArguments>/rootsuffix Exp D:\GitHub\Grepy2\Grepy2.sln</StartArguments>
+    <StartArguments>/rootsuffix Exp</StartArguments>
   </PropertyGroup>
 </Project>
