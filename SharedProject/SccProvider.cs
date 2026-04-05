@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.ComponentModel.Design;
+using System.Windows.Interop;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio;
@@ -937,19 +938,38 @@ namespace P4SimpleScc
 			int pos_y = -1;
 			Config.Get(Config.KEY.SolutionConfigDialogPosY, ref pos_y);
 
-			SolutionConfigForm Dialog = new SolutionConfigForm(pos_x, pos_y, solutionDirectory, SolutionConfigType, bUseNoAllWriteOptimization, bCheckOutOnEdit, bPromptForCheckout, bDisplayCheckedOutIcon, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
+			System.Windows.Window OwnerWindow = null;
 
-			System.Windows.Forms.DialogResult result = Dialog.ShowDialog();
-
-			if (Dialog.PosX != pos_x || Dialog.PosY != pos_y)
+			EnvDTE80.DTE2 dte2 = GetService(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+			if (dte2 != null)
 			{
-				Config.Set(Config.KEY.SolutionConfigDialogPosX, Dialog.PosX);
-				Config.Set(Config.KEY.SolutionConfigDialogPosY, Dialog.PosY);
-
-				P4SimpleSccConfigDirty = true;  // we need to save these settings
+				IntPtr hwnd = (IntPtr)dte2.MainWindow.HWnd;
+				if (hwnd != IntPtr.Zero)
+				{
+					HwndSource hwnd_source = HwndSource.FromHwnd(hwnd);
+					if (hwnd_source != null)
+					{
+						OwnerWindow = (System.Windows.Window)hwnd_source.RootVisual;
+					}
+				}
 			}
 
-			if (result == System.Windows.Forms.DialogResult.OK)
+			var Dialog = new SolutionConfigWPF(OwnerWindow, pos_x, pos_y, solutionDirectory, SolutionConfigType, bUseNoAllWriteOptimization, bCheckOutOnEdit, bPromptForCheckout, bDisplayCheckedOutIcon, bVerboseOutput, bOutputEnabled, P4Port, P4User, P4Client, VerboseOutput);
+
+			Dialog.ShowDialog();
+
+			if ((Dialog.PosX != -1) && (Dialog.PosY != -1))
+			{
+				if (Dialog.PosX != pos_x || Dialog.PosY != pos_y)
+				{
+					Config.Set(Config.KEY.SolutionConfigDialogPosX, Dialog.PosX);
+					Config.Set(Config.KEY.SolutionConfigDialogPosY, Dialog.PosY);
+
+					P4SimpleSccConfigDirty = true;  // we need to save these settings
+				}
+			}
+
+			if (Dialog._DialogResult == true)
 			{
 				// set the global configuration settings
 				SolutionConfigType = Dialog.SolutionConfigType;

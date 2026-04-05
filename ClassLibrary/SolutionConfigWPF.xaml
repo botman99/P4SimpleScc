@@ -1,0 +1,88 @@
+﻿<Window x:Class="ClassLibrary.SolutionConfigWPF"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ClassLibrary"
+             mc:Ignorable="d"
+             Title="Solution Configuration"
+             Width="557" Height="611"
+             ResizeMode="NoResize"
+             LocationChanged="WindowLocation_Changed"
+             ContentRendered="ContentRendered_Event" >
+	<Grid>
+		<Border Width="541" Height="573" Background="White" BorderBrush="Black" BorderThickness="1">
+			<Canvas>
+				<Border Canvas.Left="12" Canvas.Top="12" Width="516" Height="261" BorderBrush="Black" BorderThickness="1">
+					<Canvas Width="516" Height="261">
+						<RadioButton GroupName="EnableGroup" Name="EnableDisabledButton" Canvas.Left="12" Canvas.Top="12" Content="Disabled" Checked="EnableDisable_Checked"></RadioButton>
+						<Label Canvas.Left="12" Canvas.Top="26" Content="Disable P4SimpleScc for this solution."></Label>
+
+						<RadioButton GroupName="EnableGroup" Name="EnableAutomaticButton" Canvas.Left="12" Canvas.Top="62" Content="Automatic" Checked="EnableAutomatic_Checked"></RadioButton>
+						<Label Canvas.Left="12" Canvas.Top="76" Content="Uses 'p4 set' to get P4PORT, P4USER and P4CLIENT settings from the Windows"></Label>
+						<Label Canvas.Left="12" Canvas.Top="90" Content="environment, or from previous 'p4 set' settings, or from the .p4config file settings."></Label>
+
+						<RadioButton GroupName="EnableGroup" Name="EnableManualButton" Canvas.Left="12" Canvas.Top="126" Content="Manual Settings" Checked="EnableManual_Checked"></RadioButton>
+						<Label Canvas.Left="12" Canvas.Top="140" Content="Enter the P4PORT, P4USER and P4CLIENT settings manually."></Label>
+
+						<Label Canvas.Left="12" Canvas.Top="173" Content="P4PORT:"></Label>
+						<TextBox Name="P4PORT" Canvas.Left="82" Canvas.Top="179" Width="386"></TextBox>
+						<Label Canvas.Left="12" Canvas.Top="197" Content="P4USER:"></Label>
+						<TextBox Name="P4USER" Canvas.Left="82" Canvas.Top="203" Width="386"></TextBox>
+						<Label Canvas.Left="12" Canvas.Top="221" Content="P4CLIENT:"></Label>
+						<TextBox Name="P4CLIENT" Canvas.Left="82" Canvas.Top="227" Width="386"></TextBox>
+					</Canvas>
+				</Border>
+
+				<CheckBox Name="AllwriteCheckbox" Canvas.Left="12" Canvas.Top="285">
+					<TextBlock>
+					In a P4V Workspace with 'Allwrite' checked (in the 'Advanced' tab), treat files that are writable<LineBreak></LineBreak>
+					(not 'read-only') as checked out without checking with the Perforce server first.
+					</TextBlock>
+				</CheckBox>
+				<Label Canvas.Left="12" Canvas.Top="315">
+					(the above causes files that are writable and not under source control to mistakenly display
+				</Label>
+				<Label Canvas.Left="12" Canvas.Top="333">
+					'Revert File')
+				</Label>
+
+				<Border Canvas.Left="12" Canvas.Top="369" Width="516" Height="66" BorderBrush="Black" BorderThickness="1">
+					<Canvas>
+						<RadioButton GroupName="CheckOutFilesGroup" Name="CheckOutModifyButton" Canvas.Left="12" Canvas.Top="12" Content="Check out files on modify."></RadioButton>
+						<RadioButton GroupName="CheckOutFilesGroup" Name="CheckOutSaveButton" Canvas.Left="12" Canvas.Top="35" Content="Check out files on save."></RadioButton>
+					</Canvas>
+				</Border>
+
+
+				<CheckBox Name="PromptPermissionCheckbox" Canvas.Left="12" Canvas.Top="451">
+					<TextBlock>
+						Prompt for permission before checking out files.
+					</TextBlock>
+				</CheckBox>
+
+				<CheckBox Name="DisplayIconCheckbox" Canvas.Left="12" Canvas.Top="475">
+					<TextBlock>
+						Display 'checked out' icon on files that are checked out of Perforce.
+					</TextBlock>
+				</CheckBox>
+
+				<CheckBox Name="OutputEnabledCheckbox" Canvas.Left="12" Canvas.Top="499" Checked="OutputEnabledCheckbox_Changed" Unchecked="OutputEnabledCheckbox_Changed">
+					<TextBlock>
+						Output enabled.
+					</TextBlock>
+				</CheckBox>
+
+				<CheckBox Name="VerboseOutputCheckbox" Canvas.Left="141" Canvas.Top="499">
+					<TextBlock>
+						Verbose output ( for debugging purposes ).
+					</TextBlock>
+				</CheckBox>
+
+				<Button Canvas.Left="281" Canvas.Top="536" Width="79" Height="23" Click="OKButton_Click">OK</Button>
+				<Button Canvas.Left="395" Canvas.Top="536" Width="79" Height="23" Click="CancelButton_Click">Cancel</Button>
+
+			</Canvas>
+		</Border>
+	</Grid>
+</Window>
